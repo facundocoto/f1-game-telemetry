@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "mock": "node mock_telemetry.js",
+    "log": "node logger.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,9 +14,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@racehub-io/f1-telemetry-client": "^0.2.12",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "f1-telemetry-client": "^0.1.26",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3"
   }

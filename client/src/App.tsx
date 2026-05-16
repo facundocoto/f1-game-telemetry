@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import Dashboard from './components/Dashboard';
-import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory } from './components/Dashboard';
+import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory, MotionData } from './components/Dashboard';
 import './App.css';
 
 const SOCKET_URL = 'http://localhost:3000';
@@ -9,13 +9,15 @@ const SOCKET_URL = 'http://localhost:3000';
 function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [playerIndex, setPlayerIndex] = useState<number>(0);
-  
+
   // Player specific data
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [lapData, setLapData] = useState<LapData | null>(null);
   const [carStatus, setCarStatus] = useState<CarStatus | null>(null);
   const [carDamage, setCarDamage] = useState<CarDamage | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
+  const [motionData, setMotionData] = useState<MotionData | null>(null);
+  const [sessionData, setSessionData] = useState<any>(null);
 
   // All cars data for leaderboard
   const [allParticipants, setAllParticipants] = useState<(Participant | null)[]>(new Array(22).fill(null));
@@ -35,18 +37,29 @@ function App() {
       console.log('Disconnected from telemetry server');
     });
 
+    const loggedTypes = new Set();
+
     socket.on('telemetry', (packet) => {
       const { type, data } = packet;
-      
-      // Debug: Log packet type arrival
-      if (Math.random() < 0.01) {
-        console.log(`Frontend received: ${type}`);
+
+      // DEEP SNAPSHOT: Log each packet type once
+      if (!loggedTypes.has(type)) {
+        console.log(`DEEP SNAPSHOT [${type}]:`, data);
+        loggedTypes.add(type);
       }
 
       const pIndex = data.header?.m_playerCarIndex ?? data.m_header?.m_playerCarIndex ?? 0;
       setPlayerIndex(pIndex);
 
       switch (type) {
+        case 'session':
+          setSessionData(data);
+          break;
+
+        case 'motion':
+          setMotionData(data);
+          break;
+
         case 'carTelemetry':
           const tData = data.m_carTelemetryData ?? data.carTelemetryData;
           if (tData && tData[pIndex]) {
@@ -110,7 +123,7 @@ function App() {
       <header className="app-header">
         <div className="title-group">
           <h1>F1 Telemetry Dashboard</h1>
-          {participant && <span className="driver-name">{participant.name} #{participant.raceNumber}</span>}
+          {participant && <span className="driver-name">{(participant as any).m_name || (participant as any).name} #{(participant as any).m_raceNumber || (participant as any).raceNumber}</span>}
         </div>
         <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
           {isConnected ? 'LIVE' : 'OFFLINE'}
@@ -125,6 +138,8 @@ function App() {
           allParticipants={allParticipants}
           allLapData={allLapData}
           sessionHistory={sessionHistory}
+          motionData={motionData}
+          sessionData={sessionData}
           playerIndex={playerIndex}
         />
       </main>

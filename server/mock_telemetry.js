@@ -107,6 +107,22 @@ socket.on('connect', () => {
       }
     });
 
+    // Simulate Motion (Circular Track)
+    const angle = (Date.now() / 2000) % (Math.PI * 2);
+    const radius = 500;
+    const motionData = drivers.map((_, i) => ({
+      m_worldPositionX: Math.cos(angle - (i * 0.2)) * radius,
+      m_worldPositionZ: Math.sin(angle - (i * 0.2)) * radius,
+    }));
+
+    socket.emit('test-telemetry', {
+      type: 'motion',
+      data: {
+        m_header: { m_playerCarIndex: 0 },
+        m_carMotionData: motionData
+      }
+    });
+
     // Send session history for each car
     drivers.forEach((_, i) => {
       socket.emit('test-telemetry', {

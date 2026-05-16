@@ -1,0 +1,25 @@
+{
+  "name": "f1-game-telemetry",
+  "version": "1.0.0",
+  "description": "This project is a real-time dashboard for Codemasters' Formula 1 games (F1 23, F1 24, etc.). It captures telemetry data sent by the game via UDP and displays it in a modern, detailed web interface.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facundocoto/f1-game-telemetry.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/facundocoto/f1-game-telemetry/issues"
+  },
+  "homepage": "https://github.com/facundocoto/f1-game-telemetry#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

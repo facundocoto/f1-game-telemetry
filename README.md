@@ -32,36 +32,27 @@ For the game to send data to the dashboard, you must configure UDP telemetry:
    - *Tip (macOS): Find your IP by typing `ipconfig getifaddr en0` in the terminal, or go to **System Settings > Network**.*
 5. **UDP Port**: Set to `20777` (this is the default port our server listens on).
 6. **UDP Send Rate**: Recommended `20Hz` or `30Hz` for a balance between smoothness and network load.
-7. **UDP Format**: Recommended `2023` or `2024` (the dashboard is compatible with recent formats).
+7. **UDP Format**: **IMPORTANT FOR F1 25 USERS**: Set this to **`2024`** or **`2023`**. 
+   - *F1 25's native format has changed significantly. Using the 2024 legacy format ensures all data (names, positions, times) is displayed correctly without corruption.*
 
 ---
 
 ## 💻 How to Run the Dashboard
 
 ### 1. Installation
-Install dependencies in both folders:
+Install dependencies in all folders (root, client, and server):
 
 ```bash
-# Install backend
-cd server
+# From the root directory
 npm install
-
-# Install frontend
-cd ../client
-npm install
+cd server && npm install
+cd ../client && npm install
 ```
 
-### 2. Start the Server (Backend)
-The server will listen for packets from the Xbox and relay them to the browser.
+### 2. Start Everything (Single Command)
+You can now start both the backend and the frontend with one command from the root:
 
 ```bash
-cd server
-npm start
-```
-
-### 3. Start the Dashboard (Frontend)
-```bash
-cd client
 npm run dev
 ```
 Open the URL that appears (usually `http://localhost:5173`).
@@ -70,9 +61,9 @@ Open the URL that appears (usually `http://localhost:5173`).
 
 ## 🧪 Testing without the game (Simulator Mode)
 
-If you don't have the console handy and want to see how the dashboard looks:
+If you don't have the console handy:
 
-1. Make sure the server is running (`cd server && npm start`).
+1. Start the main system (`npm run dev`).
 2. In a new terminal, run the simulator:
    ```bash
    cd server
