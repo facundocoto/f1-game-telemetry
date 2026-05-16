@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\"",
+    "dev:mock": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\" \"npm run mock --prefix server\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

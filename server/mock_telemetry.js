@@ -17,28 +17,37 @@ socket.on('connect', () => {
   let lapNum = 1;
   let fuel = 50;
   let ers = 4000000;
+  let lapDistance = 0;
 
   setInterval(() => {
     speed = 200 + Math.random() * 100;
     lapTime += 100;
     fuel -= 0.001;
     ers -= 10000;
+    lapDistance += speed / 3.6; // Simple distance simulation
     if (ers < 0) ers = 4000000;
+
+    // Simulate Lap change
+    if (lapDistance > 5000) {
+      lapDistance = 0;
+      lapNum++;
+    }
 
     // Simulate Leaderboard
     const allLapData = drivers.map((_, i) => ({
-      carPosition: i + 1,
-      currentLapNum: lapNum,
-      currentLapTimeInMS: lapTime + (i * 1500),
-      lastLapTimeInMS: 75000 + (i * 500),
-      sector1TimeInMS: 25000,
-      sector2TimeInMS: 25000
+      m_carPosition: i + 1,
+      m_currentLapNum: lapNum,
+      m_currentLapTimeInMS: lapTime + (i * 1500),
+      m_lastLapTimeInMS: 75000 + (i * 500),
+      m_sector1TimeInMS: 25000,
+      m_sector2TimeInMS: 25000,
+      m_lapDistance: i === 0 ? lapDistance : (lapDistance - (i * 100 + Math.random() * 50))
     }));
 
     const allParticipants = drivers.map((name, i) => ({
-      name,
-      teamId: i,
-      raceNumber: i + 1
+      m_name: name,
+      m_teamId: i,
+      m_raceNumber: i + 1
     }));
 
     // Player is index 0
@@ -51,10 +60,12 @@ socket.on('connect', () => {
             m_speed: Math.round(speed),
             m_gear: 7,
             m_engineRPM: 11000,
-            m_throttle: 1.0,
-            m_brake: 0,
+            m_throttle: Math.random() > 0.2 ? 1.0 : 0.5,
+            m_brake: Math.random() > 0.8 ? 1.0 : 0,
             m_tyresSurfaceTemperature: [95, 95, 90, 90],
-            m_tyresPressure: [22.5, 22.5, 23.1, 23.1]
+            m_tyresPressure: [22.5, 22.5, 23.1, 23.1],
+            m_brakesTemperature: [400, 400, 420, 420],
+            m_engineTemperature: 105
           }
         ]
       }
@@ -82,11 +93,13 @@ socket.on('connect', () => {
         m_header: { m_playerCarIndex: 0 },
         m_carStatusData: [
           {
-            fuelInTank: fuel,
-            fuelRemainingLaps: fuel / 2,
-            ersStoreEnergy: ers,
-            visualTyreCompound: 16,
-            tyresAgeLaps: 5
+            m_fuelInTank: fuel,
+            m_fuelRemainingLaps: fuel / 2,
+            m_ersStoreEnergy: ers,
+            m_ersDeployMode: 2,
+            m_visualTyreCompound: 16,
+            m_tyresAgeLaps: 5,
+            m_maxRPM: 13500
           }
         ]
       }
@@ -98,12 +111,23 @@ socket.on('connect', () => {
         m_header: { m_playerCarIndex: 0 },
         m_carDamageData: [
           {
-            tyresWear: [10, 10, 15, 15],
-            frontLeftWingDamage: 0,
-            frontRightWingDamage: 0,
-            rearWingDamage: 0
+            m_tyresWear: [10, 10, 15, 15],
+            m_frontLeftWingDamage: 0,
+            m_frontRightWingDamage: 0,
+            m_rearWingDamage: 0
           }
         ]
+      }
+    });
+
+    socket.emit('test-telemetry', {
+      type: 'session',
+      data: {
+        m_header: { m_playerCarIndex: 0 },
+        m_trackLength: 5000,
+        m_sessionType: 1,
+        m_trackId: 1,
+        m_safetyCarStatus: 0
       }
     });
 
@@ -113,6 +137,8 @@ socket.on('connect', () => {
     const motionData = drivers.map((_, i) => ({
       m_worldPositionX: Math.cos(angle - (i * 0.2)) * radius,
       m_worldPositionZ: Math.sin(angle - (i * 0.2)) * radius,
+      m_gForceLateral: Math.sin(angle) * 2,
+      m_gForceLongitudinal: Math.cos(angle) * 1.5
     }));
 
     socket.emit('test-telemetry', {
@@ -141,5 +167,5 @@ socket.on('connect', () => {
       });
     });
 
-  }, 1000); // Reduced frequency for history updates
+  }, 100); 
 });

@@ -119,16 +119,13 @@ function App() {
   }, []);
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <div className="title-group">
-          <h1>F1 Telemetry Dashboard</h1>
-          {participant && <span className="driver-name">{(participant as any).m_name || (participant as any).name} #{(participant as any).m_raceNumber || (participant as any).raceNumber}</span>}
-        </div>
+    <div className="app-shell">
+      <div className="connection-bar">
         <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-          {isConnected ? 'LIVE' : 'OFFLINE'}
+          {isConnected ? '● SERVER CONNECTED' : '○ SERVER OFFLINE'}
         </div>
-      </header>
+        <div className="app-version">v1.0.0-PRO</div>
+      </div>
       <main>
         <Dashboard 
           telemetry={telemetry} 

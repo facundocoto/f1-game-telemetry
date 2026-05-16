@@ -72,6 +72,12 @@ export interface MotionData {
   m_carMotionData: CarMotionData[];
 }
 
+export interface TelemetryPoint {
+  distance: number;
+  throttle: number;
+  brake: number;
+}
+
 interface DashboardProps {
   telemetry: TelemetryData | null;
   lapData: LapData | null;
@@ -90,6 +96,59 @@ const formatTime = (ms: number) => {
   const m = Math.floor(ms / 60000);
   const s = ((ms % 60000) / 1000).toFixed(3);
   return `${m}:${s.padStart(6, '0')}`;
+};
+
+const TelemetryChart: React.FC<{ 
+  currentLapPoints: TelemetryPoint[]; 
+  bestLapPoints: TelemetryPoint[]; 
+  trackLength: number;
+}> = ({ currentLapPoints, bestLapPoints, trackLength }) => {
+  const width = 800;
+  const height = 150;
+  const padding = 20;
+  
+  const xScale = (dist: number) => (dist / (trackLength || 1)) * (width - padding * 2) + padding;
+  const yScale = (val: number) => height - (val * (height - padding * 2) + padding);
+
+  const generatePath = (points: TelemetryPoint[], key: 'throttle' | 'brake') => {
+    if (points.length < 2) return "";
+    return points.map((p, i) => 
+      `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${yScale(p[key])}`
+    ).join(' ');
+  };
+
+  return (
+    <div className="telemetry-chart-container">
+      <div className="chart-legend">
+        <span className="legend-item"><i style={{backgroundColor: '#00ff00'}}></i> THROTTLE</span>
+        <span className="legend-item"><i style={{backgroundColor: '#ff0000'}}></i> BRAKE</span>
+        <span className="legend-item"><i style={{backgroundColor: 'rgba(255,255,255,0.2)', border: '1px dashed #666'}}></i> BEST LAP</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="telemetry-svg">
+        {/* Grid Lines */}
+        <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#333" />
+        {[0, 0.25, 0.5, 0.75, 1].map(p => (
+          <line key={p} x1={padding} y1={yScale(p)} x2={width-padding} y2={yScale(p)} stroke="#222" strokeDasharray="5,5" />
+        ))}
+        
+        {/* Best Lap (Reference) */}
+        {bestLapPoints.length > 0 && (
+          <>
+            <path d={generatePath(bestLapPoints, 'throttle')} fill="none" stroke="rgba(0, 255, 0, 0.2)" strokeWidth="1" strokeDasharray="4,2" />
+            <path d={generatePath(bestLapPoints, 'brake')} fill="none" stroke="rgba(255, 0, 0, 0.2)" strokeWidth="1" strokeDasharray="4,2" />
+          </>
+        )}
+
+        {/* Current Lap */}
+        <path d={generatePath(currentLapPoints, 'throttle')} fill="none" stroke="#00ff00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={generatePath(currentLapPoints, 'brake')} fill="none" stroke="#ff0000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        
+        {/* Distance markers */}
+        <text x={padding} y={height - 5} fill="#666" fontSize="10">START</text>
+        <text x={width - padding - 30} y={height - 5} fill="#666" fontSize="10">FINISH</text>
+      </svg>
+    </div>
+  );
 };
 
 const RPMBar: React.FC<{ rpm: number; maxRpm: number }> = ({ rpm, maxRpm }) => {
@@ -192,10 +251,54 @@ const CircuitMap: React.FC<{ motionData: MotionData | null; allParticipants: (Pa
 const Dashboard: React.FC<DashboardProps> = ({ 
   telemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex 
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering'>('telemetry');
+  const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
   const [selectedCarIndex, setSelectedCarIndex] = React.useState<number>(playerIndex);
 
+  // Telemetry accumulation
+  const [currentLapPoints, setCurrentLapPoints] = React.useState<TelemetryPoint[]>([]);
+  const [bestLapPoints, setBestLapPoints] = React.useState<TelemetryPoint[]>([]);
+  const lastDistanceRef = React.useRef(0);
+  const lastLapNumRef = React.useRef(0);
+
   React.useEffect(() => { setSelectedCarIndex(playerIndex); }, [playerIndex]);
+
+  // Handle Telemetry Collection
+  React.useEffect(() => {
+    if (!telemetry || !lapData) return;
+
+    const currentDist = (lapData as any).m_lapDistance;
+    const currentLap = (lapData as any).m_currentLapNum;
+
+    // Detect Lap Change
+    if (currentLap !== lastLapNumRef.current) {
+      if (currentLapPoints.length > 100) {
+        // Simple logic: if this was a full lap and we don't have a best yet, or it's faster
+        // (Improving this would require checking lap times, but for now we'll just save it)
+        setBestLapPoints(currentLapPoints);
+      }
+      setCurrentLapPoints([]);
+      lastLapNumRef.current = currentLap;
+      lastDistanceRef.current = 0;
+      return;
+    }
+
+    // Detect Reset (Back to pits or restart)
+    if (currentDist < lastDistanceRef.current - 100) {
+      setCurrentLapPoints([]);
+      lastDistanceRef.current = 0;
+      return;
+    }
+
+    // Add point every 5 meters to keep it efficient
+    if (currentDist > lastDistanceRef.current + 5) {
+      setCurrentLapPoints(prev => [...prev, {
+        distance: currentDist,
+        throttle: (telemetry as any).m_throttle,
+        brake: (telemetry as any).m_brake
+      }]);
+      lastDistanceRef.current = currentDist;
+    }
+  }, [telemetry, lapData, currentLapPoints.length]);
 
   if (!telemetry || !lapData) return <div className="dashboard-empty"><div className="f1-loader"></div><h2>WAITING...</h2></div>;
 
@@ -250,17 +353,23 @@ const Dashboard: React.FC<DashboardProps> = ({
       <header className="app-header">
         <div className="title-group">
           <h1>F1 LIVE</h1>
-          {allParticipants[playerIndex] && <span className="driver-name">{(allParticipants[playerIndex] as any).m_name} #{(allParticipants[playerIndex] as any).m_raceNumber}</span>}
+          {allParticipants[playerIndex] && (
+            <div className="driver-name">
+              {(allParticipants[playerIndex] as any).m_name} #{(allParticipants[playerIndex] as any).m_raceNumber}
+            </div>
+          )}
         </div>
         
         <div className="nav-tabs-wrapper">
           <button className={`nav-tab-btn ${activeTab === 'telemetry' ? 'active' : ''}`} onClick={() => setActiveTab('telemetry')}>DASHBOARD</button>
           <button className={`nav-tab-btn ${activeTab === 'engineering' ? 'active' : ''}`} onClick={() => setActiveTab('engineering')}>ENGINEERING</button>
+          <button className={`nav-tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>ANALYSIS</button>
           <button className={`nav-tab-btn ${activeTab === 'sectors' ? 'active' : ''}`} onClick={() => setActiveTab('sectors')}>LAP HISTORY</button>
         </div>
 
-        <div className="session-status" style={{fontSize: '0.7rem', fontWeight: 900}}>
-          {scStatus > 0 ? (scStatus === 1 ? '⚠️ SAFETY CAR' : '⚠️ VSC ACTIVE') : '🟢 TRACK CLEAR'}
+        <div className="session-status-badge">
+          <i className="live-dot"></i>
+          {scStatus > 0 ? (scStatus === 1 ? 'SAFETY CAR' : 'VSC ACTIVE') : 'TRACK CLEAR'}
         </div>
       </header>
 
@@ -336,19 +445,65 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {activeTab === 'engineering' && (
             <div className="section" style={{flex: 1}}>
-              <h3>🔥 SYSTEM THERMALS</h3>
-              <div className="brake-grid" style={{height: '200px', margin: '20px 0'}}>
-                {((telemetry as any).m_brakesTemperature || []).map((temp: number, i: number) => (
-                  <div key={i} className="brake-card">
-                    <label>{['RL', 'RR', 'FL', 'FR'][i]}</label>
-                    <div className="brake-bar-bg"><div className="brake-bar-fill" style={{ height: `${(temp / 1000) * 100}%`, backgroundColor: temp > 800 ? '#ff0000' : temp > 400 ? '#ffb800' : '#00ffff' }}></div></div>
-                    <span>{temp}°C</span>
-                  </div>
-                ))}
+              <h3>🏎️ BRAKE TEMPERATURES (OPTIMAL: 400°C - 800°C)</h3>
+              <div className="brake-grid">
+                {[2, 3, 0, 1].map((i) => {
+                  const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
+                  const label = ['FRONT LEFT', 'FRONT RIGHT', 'REAR LEFT', 'REAR RIGHT'][i];
+                  return (
+                    <div key={i} className="brake-card">
+                      <label>{label}</label>
+                      <div className="brake-bar-bg">
+                        <div 
+                          className="brake-bar-fill" 
+                          style={{ 
+                            height: `${Math.min((temp / 1000) * 100, 100)}%`, 
+                            backgroundColor: temp > 850 ? '#ff0000' : temp > 400 ? '#00ff00' : '#00ffff' 
+                          }}
+                        ></div>
+                      </div>
+                      <span style={{ color: temp > 850 ? 'red' : temp > 400 ? '#00ff00' : '#00ffff' }}>{temp}°C</span>
+                    </div>
+                  );
+                })}
               </div>
-              <div style={{textAlign: 'center', padding: '30px', background: '#0a0a0e', borderRadius: '10px', border: '1px solid #222'}}>
-                <label style={{fontSize: '0.8rem', color: '#666'}}>🚀 ENGINE CORE TEMPERATURE</label>
-                <div style={{ fontSize: '5rem', fontWeight: 900, color: (telemetry as any).m_engineTemperature > 120 ? 'red' : 'white' }}>{(telemetry as any).m_engineTemperature}°C</div>
+
+              <div className="engine-thermal-display">
+                <label style={{fontSize: '0.7rem', color: '#666', fontWeight: 900, letterSpacing: '2px'}}>CORE ENGINE THERMALS</label>
+                <div className="engine-temp-value" style={{ color: (telemetry as any).m_engineTemperature > 125 ? 'var(--f1-red)' : 'white' }}>
+                  {(telemetry as any).m_engineTemperature}°C
+                </div>
+                <div style={{fontSize: '0.7rem', color: (telemetry as any).m_engineTemperature > 110 ? '#ffb800' : '#666', marginTop: '10px', fontWeight: 900}}>
+                  {(telemetry as any).m_engineTemperature > 125 ? '⚠️ OVERHEATING' : (telemetry as any).m_engineTemperature > 110 ? '📈 HIGH TEMPERATURE' : '🟢 OPERATING NOMINAL'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analysis' && (
+            <div className="section" style={{flex: 1}}>
+              <h3>📊 TELEMETRY TRACE (THROTTLE & BRAKE)</h3>
+              <div style={{marginBottom: '15px', color: '#8b8b91', fontSize: '0.8rem'}}>
+                Real-time input analysis compared to your best lap of the session.
+              </div>
+              <TelemetryChart 
+                currentLapPoints={currentLapPoints} 
+                bestLapPoints={bestLapPoints} 
+                trackLength={sessionData?.m_trackLength || 5000} 
+              />
+              <div style={{marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px'}}>
+                <div className="telemetry-stat-card" style={{background: '#0a0a0e', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #00ff00'}}>
+                  <label style={{fontSize: '0.6rem', color: '#666', display: 'block'}}>AVG THROTTLE</label>
+                  <span style={{fontSize: '1.5rem', fontWeight: 900}}>
+                    {currentLapPoints.length > 0 ? (currentLapPoints.reduce((acc, p) => acc + p.throttle, 0) / currentLapPoints.length * 100).toFixed(1) : 0}%
+                  </span>
+                </div>
+                <div className="telemetry-stat-card" style={{background: '#0a0a0e', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #ff0000'}}>
+                  <label style={{fontSize: '0.6rem', color: '#666', display: 'block'}}>AVG BRAKE</label>
+                  <span style={{fontSize: '1.5rem', fontWeight: 900}}>
+                    {currentLapPoints.length > 0 ? (currentLapPoints.reduce((acc, p) => acc + p.brake, 0) / currentLapPoints.length * 100).toFixed(1) : 0}%
+                  </span>
+                </div>
               </div>
             </div>
           )}
