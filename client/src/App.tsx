@@ -1,0 +1,135 @@
+import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
+import Dashboard from './components/Dashboard';
+import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory } from './components/Dashboard';
+import './App.css';
+
+const SOCKET_URL = 'http://localhost:3000';
+
+function App() {
+  const [isConnected, setIsConnected] = useState(false);
+  const [playerIndex, setPlayerIndex] = useState<number>(0);
+  
+  // Player specific data
+  const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
+  const [lapData, setLapData] = useState<LapData | null>(null);
+  const [carStatus, setCarStatus] = useState<CarStatus | null>(null);
+  const [carDamage, setCarDamage] = useState<CarDamage | null>(null);
+  const [participant, setParticipant] = useState<Participant | null>(null);
+
+  // All cars data for leaderboard
+  const [allParticipants, setAllParticipants] = useState<(Participant | null)[]>(new Array(22).fill(null));
+  const [allLapData, setAllLapData] = useState<(LapData | null)[]>(new Array(22).fill(null));
+  const [sessionHistory, setSessionHistory] = useState<Record<number, SessionHistory>>({});
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL);
+
+    socket.on('connect', () => {
+      setIsConnected(true);
+      console.log('Connected to telemetry server');
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+      console.log('Disconnected from telemetry server');
+    });
+
+    socket.on('telemetry', (packet) => {
+      const { type, data } = packet;
+      
+      // Debug: Log packet type arrival
+      if (Math.random() < 0.01) {
+        console.log(`Frontend received: ${type}`);
+      }
+
+      const pIndex = data.header?.m_playerCarIndex ?? data.m_header?.m_playerCarIndex ?? 0;
+      setPlayerIndex(pIndex);
+
+      switch (type) {
+        case 'carTelemetry':
+          const tData = data.m_carTelemetryData ?? data.carTelemetryData;
+          if (tData && tData[pIndex]) {
+            setTelemetry(tData[pIndex]);
+          }
+          break;
+
+        case 'lapData':
+          const lData = data.m_lapData ?? data.lapData;
+          if (lData) {
+            setAllLapData(lData);
+            if (lData[pIndex]) {
+              setLapData(lData[pIndex]);
+            }
+          }
+          break;
+
+        case 'carStatus':
+          const sData = data.m_carStatusData ?? data.carStatusData;
+          if (sData && sData[pIndex]) {
+            setCarStatus(sData[pIndex]);
+          }
+          break;
+
+        case 'carDamage':
+          const dData = data.m_carDamageData ?? data.carDamageData;
+          if (dData && dData[pIndex]) {
+            setCarDamage(dData[pIndex]);
+          }
+          break;
+
+        case 'participants':
+          const pData = data.m_participants ?? data.participants;
+          if (pData) {
+            setAllParticipants(pData);
+            if (pData[pIndex]) {
+              setParticipant(pData[pIndex]);
+            }
+          }
+          break;
+
+        case 'sessionHistory':
+          const carIdx = data.m_carIdx ?? data.carIdx;
+          if (carIdx !== undefined) {
+            setSessionHistory(prev => ({
+              ...prev,
+              [carIdx]: data
+            }));
+          }
+          break;
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  return (
+    <div className="app-container">
+      <header className="app-header">
+        <div className="title-group">
+          <h1>F1 Telemetry Dashboard</h1>
+          {participant && <span className="driver-name">{participant.name} #{participant.raceNumber}</span>}
+        </div>
+        <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+          {isConnected ? 'LIVE' : 'OFFLINE'}
+        </div>
+      </header>
+      <main>
+        <Dashboard 
+          telemetry={telemetry} 
+          lapData={lapData}
+          carStatus={carStatus}
+          carDamage={carDamage}
+          allParticipants={allParticipants}
+          allLapData={allLapData}
+          sessionHistory={sessionHistory}
+          playerIndex={playerIndex}
+        />
+      </main>
+    </div>
+  );
+}
+
+export default App;
