@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import Dashboard from './components/Dashboard';
 import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory, MotionData } from './components/Dashboard';
-import './App.css';
 
 const SOCKET_URL = 'http://localhost:3000';
 
@@ -119,14 +118,14 @@ function App() {
   }, []);
 
   return (
-    <div className="app-shell">
-      <div className="connection-bar">
-        <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+    <div className="flex flex-col min-h-screen bg-f1-dark font-f1">
+      <div className="bg-black h-6 flex justify-between items-center px-[15px] border-b border-[#222]">
+        <div className={`font-black text-[0.7rem] px-2.5 py-1 rounded tracking-wider border ${isConnected ? 'text-[#00ff00] border-[#00ff00]/30' : 'text-red-600 border-red-600/30'}`}>
           {isConnected ? '● SERVER CONNECTED' : '○ SERVER OFFLINE'}
         </div>
-        <div className="app-version">v1.0.0-PRO</div>
+        <div className="text-[0.6rem] text-[#444] font-black">v1.0.0-PRO</div>
       </div>
-      <main>
+      <main className="flex-1">
         <Dashboard 
           telemetry={telemetry} 
           lapData={lapData}
