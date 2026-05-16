@@ -76,10 +76,13 @@ export interface TelemetryPoint {
   distance: number;
   throttle: number;
   brake: number;
+  speed: number;
+  time: number;
 }
 
 interface DashboardProps {
   telemetry: TelemetryData | null;
+  allTelemetry: (TelemetryData | null)[];
   lapData: LapData | null;
   carStatus: CarStatus | null;
   carDamage: CarDamage | null;
@@ -98,59 +101,115 @@ const formatTime = (ms: number) => {
   return `${m}:${s.padStart(6, '0')}`;
 };
 
-const TelemetryChart: React.FC<{ 
-  currentLapPoints: TelemetryPoint[]; 
-  bestLapPoints: TelemetryPoint[]; 
+const TelemetryChart: React.FC<{
+  primaryPoints: TelemetryPoint[];
+  secondaryPoints: TelemetryPoint[];
   trackLength: number;
-}> = ({ currentLapPoints, bestLapPoints, trackLength }) => {
-  const width = 800;
-  const height = 150;
-  const padding = 20;
-  
-  const xScale = (dist: number) => (dist / (trackLength || 1)) * (width - padding * 2) + padding;
-  const yScale = (val: number) => height - (val * (height - padding * 2) + padding);
+  primaryLabel: string;
+  secondaryLabel: string;
+}> = ({ primaryPoints, secondaryPoints, trackLength, primaryLabel, secondaryLabel }) => {
+  const width = 1000;
+  const height = 400;
+  const padding = 30;
+  const chartHeight = (height - padding * 4) / 3;
 
-  const generatePath = (points: TelemetryPoint[], key: 'throttle' | 'brake') => {
+  const xScale = (dist: number) => (dist / (trackLength || 1)) * (width - padding * 2) + padding;
+
+  const getDeltaAtDistance = (dist: number) => {
+    if (primaryPoints.length === 0 || secondaryPoints.length === 0) return 0;
+
+    // Simple binary search for closest distance
+    const findClosest = (points: TelemetryPoint[], targetDist: number) => {
+      let low = 0, high = points.length - 1;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (points[mid].distance < targetDist) low = mid + 1;
+        else if (points[mid].distance > targetDist) high = mid - 1;
+        else return points[mid];
+      }
+      const p1 = points[Math.max(0, high)];
+      const p2 = points[Math.min(points.length - 1, low)];
+      if (!p1) return p2;
+      if (!p2) return p1;
+      return Math.abs(p1.distance - targetDist) < Math.abs(p2.distance - targetDist) ? p1 : p2;
+    };
+
+    const p1 = findClosest(primaryPoints, dist);
+    const p2 = findClosest(secondaryPoints, dist);
+
+    return (p1.time - p2.time) / 1000; // Delta in seconds
+  };
+
+  const generatePath = (points: TelemetryPoint[], getY: (p: TelemetryPoint) => number, offset: number) => {
     if (points.length < 2) return "";
-    return points.map((p, i) => 
-      `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${yScale(p[key])}`
+    return points.map((p, i) =>
+      `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${offset + chartHeight - (getY(p) * chartHeight)}`
+    ).join(' ');
+  };
+
+  const deltaPoints = Array.from({ length: 100 }).map((_, i) => {
+    const dist = (i / 100) * trackLength;
+    return { distance: dist, delta: getDeltaAtDistance(dist) };
+  });
+
+  const maxDelta = Math.max(0.5, Math.max(...deltaPoints.map(p => Math.abs(p.delta))));
+
+  const generateDeltaPath = () => {
+    if (deltaPoints.length < 2) return "";
+    return deltaPoints.map((p, i) =>
+      `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${padding + chartHeight/2 - (p.delta / maxDelta) * (chartHeight/2)}`
     ).join(' ');
   };
 
   return (
-    <div className="bg-[#050508] border border-[#222] rounded-lg p-[15px] mt-2.5 w-full">
-      <div className="flex gap-5 mb-2.5 justify-center">
-        <span className="flex items-center gap-1.5 text-[0.65rem] font-black text-f1-gray"><i className="inline-block w-3 h-1 bg-[#00ff00]"></i> THROTTLE</span>
-        <span className="flex items-center gap-1.5 text-[0.65rem] font-black text-f1-gray"><i className="inline-block w-3 h-1 bg-[#ff0000]"></i> BRAKE</span>
-        <span className="flex items-center gap-1.5 text-[0.65rem] font-black text-f1-gray"><i className="inline-block w-3 h-1 bg-white/20 border border-dashed border-[#666]"></i> BEST LAP</span>
+    <div className="bg-[#050508] border border-[#222] rounded-lg p-5 mt-2.5 w-full">
+      <div className="flex gap-8 mb-5 justify-center border-b border-white/5 pb-3">
+        <span className="flex items-center gap-2 text-[0.7rem] font-black text-white"><i className="w-3 h-3 rounded-full bg-f1-red"></i> {primaryLabel}</span>
+        <span className="flex items-center gap-2 text-[0.7rem] font-black text-f1-gray"><i className="w-3 h-3 rounded-full bg-white/30 border border-white/50"></i> {secondaryLabel}</span>
+        <span className="flex items-center gap-2 text-[0.7rem] font-black text-f1-purple"><i className="w-3 h-1 bg-f1-purple"></i> TIME DELTA</span>
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto block">
-        {/* Grid Lines */}
-        <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#333" />
-        {[0, 0.25, 0.5, 0.75, 1].map(p => (
-          <line key={p} x1={padding} y1={yScale(p)} x2={width-padding} y2={yScale(p)} stroke="#222" strokeDasharray="5,5" />
-        ))}
-        
-        {/* Best Lap (Reference) */}
-        {bestLapPoints.length > 0 && (
-          <>
-            <path d={generatePath(bestLapPoints, 'throttle')} fill="none" stroke="rgba(0, 255, 0, 0.2)" strokeWidth="1" strokeDasharray="4,2" />
-            <path d={generatePath(bestLapPoints, 'brake')} fill="none" stroke="rgba(255, 0, 0, 0.2)" strokeWidth="1" strokeDasharray="4,2" />
-          </>
-        )}
 
-        {/* Current Lap */}
-        <path d={generatePath(currentLapPoints, 'throttle')} fill="none" stroke="#00ff00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d={generatePath(currentLapPoints, 'brake')} fill="none" stroke="#ff0000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto block">
+        {/* DELTA CHART (Top) */}
+        <g>
+          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">TIME DELTA (SEC)</text>
+          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+          <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#444" strokeDasharray="5,5" />
+          <path d={generateDeltaPath()} fill="none" stroke="#b131ff" strokeWidth="2" />
+          <text x={width - padding + 5} y={padding + 10} fill="#666" fontSize="8">+{maxDelta.toFixed(1)}s</text>
+          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8">-{maxDelta.toFixed(1)}s</text>
+        </g>
+
+        {/* SPEED CHART (Middle) */}
+        <g transform={`translate(0, ${chartHeight + padding})`}>
+          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">SPEED (KM/H)</text>
+          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+          <path d={generatePath(secondaryPoints, p => p.speed / 350, padding)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4,2" />
+          <path d={generatePath(primaryPoints, p => p.speed / 350, padding)} fill="none" stroke="#e10600" strokeWidth="2" />
+        </g>
+
+        {/* THROTTLE/BRAKE CHART (Bottom) */}
+        <g transform={`translate(0, ${(chartHeight + padding) * 2})`}>
+          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">INPUTS (THROTTLE & BRAKE)</text>
+          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+
+          {/* Reference */}
+          <path d={generatePath(secondaryPoints, p => p.throttle, padding)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="1" />
+          <path d={generatePath(secondaryPoints, p => p.brake, padding)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="1" />
+
+          {/* Primary */}
+          <path d={generatePath(primaryPoints, p => p.throttle, padding)} fill="none" stroke="#00ff00" strokeWidth="2" />
+          <path d={generatePath(primaryPoints, p => p.brake, padding)} fill="none" stroke="#ff0000" strokeWidth="2" />
+        </g>
+
         {/* Distance markers */}
         <text x={padding} y={height - 5} fill="#666" fontSize="10">START</text>
-        <text x={width - padding - 30} y={height - 5} fill="#666" fontSize="10">FINISH</text>
+        <text x={width/2} y={height - 5} fill="#666" fontSize="10" textAnchor="middle">MID LAP</text>
+        <text x={width - padding} y={height - 5} fill="#666" fontSize="10" textAnchor="end">FINISH</text>
       </svg>
     </div>
   );
 };
-
 const RPMBar: React.FC<{ rpm: number; maxRpm: number }> = ({ rpm, maxRpm }) => {
   const numSegments = 20;
   const percentage = Math.min((rpm / (maxRpm || 13500)), 1);
@@ -262,56 +321,72 @@ const CircuitMap: React.FC<{ motionData: MotionData | null; allParticipants: (Pa
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  telemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex 
+  telemetry, allTelemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex 
 }) => {
   const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
   const [selectedCarIndex, setSelectedCarIndex] = React.useState<number>(playerIndex);
 
   // Telemetry accumulation
-  const [currentLapPoints, setCurrentLapPoints] = React.useState<TelemetryPoint[]>([]);
-  const [bestLapPoints, setBestLapPoints] = React.useState<TelemetryPoint[]>([]);
-  const lastDistanceRef = React.useRef(0);
-  const lastLapNumRef = React.useRef(0);
+  const [bestLapsTelemetry, setBestLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
+  const [currentLapsTelemetry, setCurrentLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
+  const [comparisonCarIndex, setComparisonCarIndex] = React.useState<number | null>(null);
+  const lastDistancesRef = React.useRef<Record<number, number>>({});
+  const lastLapNumsRef = React.useRef<Record<number, number>>({});
 
   React.useEffect(() => { setSelectedCarIndex(playerIndex); }, [playerIndex]);
 
-  // Handle Telemetry Collection
+  // Handle Telemetry Collection for all cars
   React.useEffect(() => {
-    if (!telemetry || !lapData) return;
+    if (!allTelemetry || !allLapData) return;
 
-    const currentDist = (lapData as any).m_lapDistance;
-    const currentLap = (lapData as any).m_currentLapNum;
+    allLapData.forEach((ld, idx) => {
+      if (!ld || !allTelemetry[idx]) return;
 
-    // Detect Lap Change
-    if (currentLap !== lastLapNumRef.current) {
-      if (currentLapPoints.length > 100) {
-        // Simple logic: if this was a full lap and we don't have a best yet, or it's faster
-        // (Improving this would require checking lap times, but for now we'll just save it)
-        setBestLapPoints(currentLapPoints);
+      const currentDist = (ld as any).m_lapDistance;
+      const currentLap = (ld as any).m_currentLapNum;
+      const lastLap = lastLapNumsRef.current[idx] || 0;
+      const lastDist = lastDistancesRef.current[idx] || 0;
+
+      // Detect Lap Change
+      if (currentLap !== lastLap) {
+        if (currentLapsTelemetry[idx]?.length > 100) {
+          setBestLapsTelemetry(prev => ({
+            ...prev,
+            [idx]: currentLapsTelemetry[idx]
+          }));
+        }
+        setCurrentLapsTelemetry(prev => ({ ...prev, [idx]: [] }));
+        lastLapNumsRef.current[idx] = currentLap;
+        lastDistancesRef.current[idx] = 0;
+        return;
       }
-      setCurrentLapPoints([]);
-      lastLapNumRef.current = currentLap;
-      lastDistanceRef.current = 0;
-      return;
-    }
 
-    // Detect Reset (Back to pits or restart)
-    if (currentDist < lastDistanceRef.current - 100) {
-      setCurrentLapPoints([]);
-      lastDistanceRef.current = 0;
-      return;
-    }
+      // Detect Reset
+      if (currentDist < lastDist - 100) {
+        setCurrentLapsTelemetry(prev => ({ ...prev, [idx]: [] }));
+        lastDistancesRef.current[idx] = 0;
+        return;
+      }
 
-    // Add point every 5 meters to keep it efficient
-    if (currentDist > lastDistanceRef.current + 5) {
-      setCurrentLapPoints(prev => [...prev, {
-        distance: currentDist,
-        throttle: (telemetry as any).m_throttle,
-        brake: (telemetry as any).m_brake
-      }]);
-      lastDistanceRef.current = currentDist;
-    }
-  }, [telemetry, lapData, currentLapPoints.length]);
+      // Add point every 5 meters
+      if (currentDist > lastDist + 5) {
+        const tel = allTelemetry[idx] as any;
+        const newPoint: TelemetryPoint = {
+          distance: currentDist,
+          throttle: tel.m_throttle,
+          brake: tel.m_brake,
+          speed: tel.m_speed,
+          time: (ld as any).m_currentLapTimeInMS
+        };
+
+        setCurrentLapsTelemetry(prev => ({
+          ...prev,
+          [idx]: [...(prev[idx] || []), newPoint]
+        }));
+        lastDistancesRef.current[idx] = currentDist;
+      }
+    });
+  }, [allTelemetry, allLapData]);
 
   if (!telemetry || !lapData) return <div className="dashboard-empty"><div className="f1-loader"></div><h2>WAITING...</h2></div>;
 
@@ -515,29 +590,55 @@ const Dashboard: React.FC<DashboardProps> = ({
           )}
 
           {activeTab === 'analysis' && (
-            <div className="f1-section flex-1">
-              <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">📊 TELEMETRY TRACE (THROTTLE & BRAKE)</h3>
-              <div className="mb-[15px] text-f1-gray text-[0.8rem]">
-                Real-time input analysis compared to your best lap of the session.
+            <div className="f1-section flex-1 min-w-[800px]">
+              <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                <div>
+                  <h3 className="m-0 text-[0.85rem] font-black text-white uppercase tracking-wider">📊 PERFORMANCE ANALYSIS</h3>
+                  <div className="text-f1-gray text-[0.65rem] font-black mt-1 uppercase opacity-60">Real-time telemetry comparison and delta tracking</div>
+                </div>
+                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
+                  <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
+                  <select 
+                    className="bg-[#050508] border border-white/20 text-white text-[0.7rem] px-3 py-1.5 rounded font-black uppercase outline-none focus:border-f1-red transition-all cursor-pointer hover:bg-black"
+                    value={comparisonCarIndex ?? ""}
+                    onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}
+                  >
+                    <option value="">PERSONAL BEST LAP</option>
+                    {allParticipants.map((p, i) => {
+                      if (!p || i === playerIndex) return null;
+                      const hasData = bestLapsTelemetry[i]?.length > 0;
+                      return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
+                    })}
+                  </select>
+                </div>
               </div>
+
               <TelemetryChart 
-                currentLapPoints={currentLapPoints} 
-                bestLapPoints={bestLapPoints} 
+                primaryPoints={currentLapsTelemetry[playerIndex] || []} 
+                secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 trackLength={sessionData?.m_trackLength || 5000} 
+                primaryLabel="LIVE TELEMETRY"
+                secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : "SESSION PERSONAL BEST"}
               />
-              <div className="mt-5 grid grid-cols-2 gap-5">
-                <div className="bg-[#0a0a0e] p-[15px] rounded-lg border-l-4 border-[#00ff00]">
-                  <label className="text-[0.6rem] text-[#666] block uppercase font-black">AVG THROTTLE</label>
-                  <span className="text-[1.5rem] font-black">
-                    {currentLapPoints.length > 0 ? (currentLapPoints.reduce((acc, p) => acc + p.throttle, 0) / currentLapPoints.length * 100).toFixed(1) : 0}%
-                  </span>
-                </div>
-                <div className="bg-[#0a0a0e] p-[15px] rounded-lg border-l-4 border-[#ff0000]">
-                  <label className="text-[0.6rem] text-[#666] block uppercase font-black">AVG BRAKE</label>
-                  <span className="text-[1.5rem] font-black">
-                    {currentLapPoints.length > 0 ? (currentLapPoints.reduce((acc, p) => acc + p.brake, 0) / currentLapPoints.length * 100).toFixed(1) : 0}%
-                  </span>
-                </div>
+
+              <div className="mt-5 grid grid-cols-4 gap-4">
+                {[
+                  { label: 'AVG THROTTLE', value: (currentLapsTelemetry[playerIndex] || []).reduce((acc, p) => acc + p.throttle, 0) / ((currentLapsTelemetry[playerIndex] || []).length || 1) * 100, unit: '%', color: '#00ff00' },
+                  { label: 'AVG BRAKE', value: (currentLapsTelemetry[playerIndex] || []).reduce((acc, p) => acc + p.brake, 0) / ((currentLapsTelemetry[playerIndex] || []).length || 1) * 100, unit: '%', color: '#ff0000' },
+                  { label: 'MAX SPEED', value: Math.max(0, ...(currentLapsTelemetry[playerIndex] || []).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
+                  { label: 'EST. DELTA', value: ((currentLapsTelemetry[playerIndex]?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? 
+                    ((currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].distance) < Math.abs(prev.distance - currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
+                ].map((stat, i) => (
+                  <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02]" style={{ borderBottomColor: stat.color }}>
+                    <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[1.4rem] font-black" style={{ color: stat.isDelta ? (stat.value > 0 ? '#ff0000' : '#00ff00') : 'white' }}>
+                        {stat.isDelta && stat.value > 0 ? '+' : ''}{stat.value.toFixed(stat.isDelta ? 3 : 1)}
+                      </span>
+                      <span className="text-[0.65rem] font-black text-[#444]">{stat.unit}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

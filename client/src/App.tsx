@@ -11,6 +11,7 @@ function App() {
 
   // Player specific data
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
+  const [allTelemetry, setAllTelemetry] = useState<(TelemetryData | null)[]>(new Array(22).fill(null));
   const [lapData, setLapData] = useState<LapData | null>(null);
   const [carStatus, setCarStatus] = useState<CarStatus | null>(null);
   const [carDamage, setCarDamage] = useState<CarDamage | null>(null);
@@ -61,8 +62,11 @@ function App() {
 
         case 'carTelemetry':
           const tData = data.m_carTelemetryData ?? data.carTelemetryData;
-          if (tData && tData[pIndex]) {
-            setTelemetry(tData[pIndex]);
+          if (tData) {
+            setAllTelemetry(tData);
+            if (tData[pIndex]) {
+              setTelemetry(tData[pIndex]);
+            }
           }
           break;
 
@@ -128,6 +132,7 @@ function App() {
       <main className="flex-1">
         <Dashboard 
           telemetry={telemetry} 
+          allTelemetry={allTelemetry}
           lapData={lapData}
           carStatus={carStatus}
           carDamage={carDamage}
