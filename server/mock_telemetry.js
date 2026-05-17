@@ -13,36 +13,43 @@ socket.on('connect', () => {
   console.log('Connected to server. Sending advanced mock data...');
   
   let speed = 0;
-  let lapTime = 0;
+  let lapTime = 60000;
   let lapNum = 1;
   let fuel = 50;
   let ers = 4000000;
-  let lapDistance = 0;
+  let lapDistance = 4800; // Start closer to finish to get a "Best Lap" quickly
 
   setInterval(() => {
-    speed = 200 + Math.random() * 100;
+    speed = 220 + Math.random() * 80;
     lapTime += 100;
     fuel -= 0.001;
     ers -= 10000;
-    lapDistance += speed / 3.6; // Simple distance simulation
+    const distanceDelta = (speed / 3.6) * 0.1;
+    lapDistance += distanceDelta;
     if (ers < 0) ers = 4000000;
 
     // Simulate Lap change
     if (lapDistance > 5000) {
-      lapDistance = 0;
+      lapDistance -= 5000;
       lapNum++;
+      lapTime = 0;
     }
 
     // Simulate Leaderboard
-    const allLapData = drivers.map((_, i) => ({
-      m_carPosition: i + 1,
-      m_currentLapNum: lapNum,
-      m_currentLapTimeInMS: lapTime + (i * 1500),
-      m_lastLapTimeInMS: 75000 + (i * 500),
-      m_sector1TimeInMS: 25000,
-      m_sector2TimeInMS: 25000,
-      m_lapDistance: i === 0 ? lapDistance : (lapDistance - (i * 100 + Math.random() * 50))
-    }));
+    const allLapData = drivers.map((_, i) => {
+      let driverDist = lapDistance - (i * 150); // Increased gap for clarity
+      while (driverDist < 0) driverDist += 5000;
+
+      return {
+        m_carPosition: i + 1,
+        m_currentLapNum: lapNum,
+        m_currentLapTimeInMS: lapTime + (i * 50),
+        m_lastLapTimeInMS: 75000 + (i * 500),
+        m_sector1TimeInMS: 25000,
+        m_sector2TimeInMS: 25000,
+        m_lapDistance: driverDist
+      };
+    });
 
     const allParticipants = drivers.map((name, i) => ({
       m_name: name,
@@ -50,24 +57,48 @@ socket.on('connect', () => {
       m_raceNumber: i + 1
     }));
 
+    const allTelemetryData = drivers.map((_, i) => {
+      const isPlayer = i === 0;
+      const driverSpeed = isPlayer ? speed : (speed - (i * 2 + Math.random() * 5));
+      const driverThrottle = isPlayer ? (Math.random() > 0.2 ? 1.0 : 0.5) : (Math.random() > 0.3 ? 0.9 : 0.4);
+      const driverBrake = isPlayer ? (Math.random() > 0.8 ? 1.0 : 0) : (Math.random() > 0.85 ? 1.0 : 0);
+      
+      return {
+        m_speed: Math.round(driverSpeed),
+        m_gear: 7,
+        m_engineRPM: 11000 - (i * 100),
+        m_throttle: driverThrottle,
+        m_brake: driverBrake,
+        m_tyresSurfaceTemperature: [95, 95, 90, 90],
+        m_tyresPressure: [22.5, 22.5, 23.1, 23.1],
+        m_brakesTemperature: [400, 400, 420, 420],
+        m_engineTemperature: 105
+      };
+    });
+
+    const allCarStatus = drivers.map((_, i) => ({
+      m_fuelInTank: fuel - (i * 0.1),
+      m_fuelRemainingLaps: (fuel / 2) - (i * 0.05),
+      m_ersStoreEnergy: ers,
+      m_ersDeployMode: 2,
+      m_visualTyreCompound: 16,
+      m_tyresAgeLaps: 5 + i,
+      m_maxRPM: 13500
+    }));
+
+    const allCarDamage = drivers.map((_, i) => ({
+      m_tyresWear: [10 + i, 10 + i, 15 + i, 15 + i],
+      m_frontLeftWingDamage: i * 2,
+      m_frontRightWingDamage: i * 2,
+      m_rearWingDamage: i
+    }));
+
     // Player is index 0
     socket.emit('test-telemetry', {
       type: 'carTelemetry',
       data: {
         m_header: { m_playerCarIndex: 0 },
-        m_carTelemetryData: [
-          {
-            m_speed: Math.round(speed),
-            m_gear: 7,
-            m_engineRPM: 11000,
-            m_throttle: Math.random() > 0.2 ? 1.0 : 0.5,
-            m_brake: Math.random() > 0.8 ? 1.0 : 0,
-            m_tyresSurfaceTemperature: [95, 95, 90, 90],
-            m_tyresPressure: [22.5, 22.5, 23.1, 23.1],
-            m_brakesTemperature: [400, 400, 420, 420],
-            m_engineTemperature: 105
-          }
-        ]
+        m_carTelemetryData: allTelemetryData
       }
     });
 
@@ -91,17 +122,7 @@ socket.on('connect', () => {
       type: 'carStatus',
       data: {
         m_header: { m_playerCarIndex: 0 },
-        m_carStatusData: [
-          {
-            m_fuelInTank: fuel,
-            m_fuelRemainingLaps: fuel / 2,
-            m_ersStoreEnergy: ers,
-            m_ersDeployMode: 2,
-            m_visualTyreCompound: 16,
-            m_tyresAgeLaps: 5,
-            m_maxRPM: 13500
-          }
-        ]
+        m_carStatusData: allCarStatus
       }
     });
 
@@ -109,14 +130,7 @@ socket.on('connect', () => {
       type: 'carDamage',
       data: {
         m_header: { m_playerCarIndex: 0 },
-        m_carDamageData: [
-          {
-            m_tyresWear: [10, 10, 15, 15],
-            m_frontLeftWingDamage: 0,
-            m_frontRightWingDamage: 0,
-            m_rearWingDamage: 0
-          }
-        ]
+        m_carDamageData: allCarDamage
       }
     });
 

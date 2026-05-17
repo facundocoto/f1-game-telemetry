@@ -169,21 +169,31 @@ const TelemetryChart: React.FC<{
         <span className="flex items-center gap-2 text-[0.7rem] font-black text-f1-purple"><i className="w-3 h-1 bg-f1-purple"></i> TIME DELTA</span>
       </div>
 
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto block">
+      <svg viewBox={`0 0 ${width + 45} ${height}`} className="w-full h-auto block">
         {/* DELTA CHART (Top) */}
         <g>
           <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">TIME DELTA (SEC)</text>
           <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
           <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#444" strokeDasharray="5,5" />
           <path d={generateDeltaPath()} fill="none" stroke="#b131ff" strokeWidth="2" />
-          <text x={width - padding + 5} y={padding + 10} fill="#666" fontSize="8">+{maxDelta.toFixed(1)}s</text>
-          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8">-{maxDelta.toFixed(1)}s</text>
+          <text x={width - padding + 5} y={padding + 10} fill="#666" fontSize="8" fontWeight="black">+{maxDelta.toFixed(1)}s</text>
+          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">0.0s</text>
+          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">-{maxDelta.toFixed(1)}s</text>
         </g>
 
         {/* SPEED CHART (Middle) */}
         <g transform={`translate(0, ${chartHeight + padding})`}>
           <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">SPEED (KM/H)</text>
           <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+          
+          {/* Y-Axis Labels */}
+          <text x={width - padding + 5} y={padding + 8} fill="#666" fontSize="8" fontWeight="black">350</text>
+          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">175</text>
+          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">0</text>
+          
+          {/* Grid lines */}
+          <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
+
           <path d={generatePath(secondaryPoints, p => p.speed / 350, padding)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4,2" />
           <path d={generatePath(primaryPoints, p => p.speed / 350, padding)} fill="none" stroke="#e10600" strokeWidth="2" />
         </g>
@@ -192,6 +202,14 @@ const TelemetryChart: React.FC<{
         <g transform={`translate(0, ${(chartHeight + padding) * 2})`}>
           <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">INPUTS (THROTTLE & BRAKE)</text>
           <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+
+          {/* Y-Axis Labels */}
+          <text x={width - padding + 5} y={padding + 8} fill="#666" fontSize="8" fontWeight="black">100%</text>
+          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">50%</text>
+          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">0%</text>
+
+          {/* Grid lines */}
+          <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
 
           {/* Reference */}
           <path d={generatePath(secondaryPoints, p => p.throttle, padding)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="1" />
@@ -203,9 +221,21 @@ const TelemetryChart: React.FC<{
         </g>
 
         {/* Distance markers */}
-        <text x={padding} y={height - 5} fill="#666" fontSize="10">START</text>
-        <text x={width/2} y={height - 5} fill="#666" fontSize="10" textAnchor="middle">MID LAP</text>
-        <text x={width - padding} y={height - 5} fill="#666" fontSize="10" textAnchor="end">FINISH</text>
+        <text x={padding} y={height - 5} fill="#666" fontSize="10" fontWeight="black">START</text>
+        
+        {Array.from({ length: Math.floor(trackLength / 1000) }).map((_, i) => {
+          const dist = (i + 1) * 1000;
+          const x = xScale(dist);
+          if (x > width - padding - 50) return null; // Don't overlap with FINISH
+          return (
+            <g key={i}>
+              <line x1={x} y1={padding} x2={x} y2={height - padding} stroke="#ffffff" strokeOpacity="0.05" strokeDasharray="2,2" />
+              <text x={x} y={height - 5} fill="#444" fontSize="8" textAnchor="middle" fontWeight="black">{i + 1}KM</text>
+            </g>
+          );
+        })}
+
+        <text x={width - padding} y={height - 5} fill="#666" fontSize="10" textAnchor="end" fontWeight="black">FINISH</text>
       </svg>
     </div>
   );
@@ -330,6 +360,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [bestLapsTelemetry, setBestLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
   const [currentLapsTelemetry, setCurrentLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
   const [comparisonCarIndex, setComparisonCarIndex] = React.useState<number | null>(null);
+  const [primaryDataSource, setPrimaryDataSource] = React.useState<'live' | 'best'>('live');
   const lastDistancesRef = React.useRef<Record<number, number>>({});
   const lastLapNumsRef = React.useRef<Record<number, number>>({});
 
@@ -379,6 +410,10 @@ const Dashboard: React.FC<DashboardProps> = ({
           time: (ld as any).m_currentLapTimeInMS
         };
 
+        if (idx === playerIndex) {
+          // console.log(`[DEBUG] Collected point for player at ${currentDist}m`);
+        }
+
         setCurrentLapsTelemetry(prev => ({
           ...prev,
           [idx]: [...(prev[idx] || []), newPoint]
@@ -388,12 +423,33 @@ const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [allTelemetry, allLapData]);
 
+  // Log summary of available telemetry for analysis
+  React.useEffect(() => {
+    if (activeTab === 'analysis') {
+      console.log('--- Analysis Tab Debug ---');
+      console.log('Player index:', playerIndex);
+      console.log('Current lap points:', currentLapsTelemetry[playerIndex]?.length || 0);
+      console.log('Best lap points:', bestLapsTelemetry[playerIndex]?.length || 0);
+      console.log('Comparison car index:', comparisonCarIndex);
+      if (comparisonCarIndex !== null) {
+        console.log('Comparison best lap points:', bestLapsTelemetry[comparisonCarIndex]?.length || 0);
+      }
+      console.log('-------------------------');
+    }
+  }, [activeTab, playerIndex, currentLapsTelemetry, bestLapsTelemetry, comparisonCarIndex]);
+
   if (!telemetry || !lapData) return <div className="dashboard-empty"><div className="f1-loader"></div><h2>WAITING...</h2></div>;
 
   const leaderboard = allLapData
     .map((ld, index) => ({ ld, index }))
     .filter(item => item.ld !== null && item.index < 20)
-    .sort((a, b) => ((a.ld as any).m_carPosition ?? 99) - ((b.ld as any).m_carPosition ?? 99));
+    .sort((a, b) => ((a.ld as any).m_carPosition ?? 99) - ((b.ld as any).m_carPosition ?? 99))
+    .map((item, i, arr) => {
+      const leaderTime = (arr[0].ld as any).m_currentLapTimeInMS;
+      const myTime = (item.ld as any).m_currentLapTimeInMS;
+      const delta = i === 0 ? 0 : myTime - leaderTime;
+      return { ...item, delta };
+    });
 
   const history = sessionHistory[selectedCarIndex];
   const lapsList = history?.m_lapHistoryData.slice(0, history.m_numLaps).reverse() || [];
@@ -470,7 +526,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="flex-1 overflow-y-auto -mx-[5px]">
               <table className="w-full border-separate border-spacing-y-0.5 text-white">
                 <tbody>
-                  {leaderboard.map(({ ld, index }) => (
+                  {leaderboard.map(({ ld, index, delta }) => (
                     <tr 
                       key={index} 
                       className={`
@@ -480,9 +536,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                       `} 
                       onClick={() => setSelectedCarIndex(index)}
                     >
-                      <td className={`w-10 bg-black/30 text-center font-black text-white [clip-path:polygon(0_0,100%_0,80%_100%,0%_100%)] py-2.5 px-2 text-[0.85rem] ${index === playerIndex ? 'bg-f1-red!' : ''}`}>{(ld as any).m_carPosition}</td>
-                      <td className="pl-[15px] py-2.5 px-2 text-[0.85rem] font-bold">{(allParticipants[index] as any)?.m_name || `CAR ${index}`}</td>
-                      <td className="py-2.5 px-2 text-[0.8rem] font-mono tracking-tighter text-right">{formatTime((ld as any).m_currentLapTimeInMS)}</td>
+                      <td className={`w-8 bg-black/30 text-center font-black text-white [clip-path:polygon(0_0,100%_0,80%_100%,0%_100%)] py-2.5 px-2 text-[0.8rem] ${index === playerIndex ? 'bg-f1-red!' : ''}`}>{(ld as any).m_carPosition}</td>
+                      <td className="pl-[10px] py-2.5 px-1 text-[0.8rem] font-bold truncate max-w-[120px]">{(allParticipants[index] as any)?.m_name || `CAR ${index}`}</td>
+                      <td className="py-2.5 px-1 text-[0.75rem] font-mono tracking-tighter text-right text-white/90">{formatTime((ld as any).m_currentLapTimeInMS)}</td>
+                      <td className="py-2.5 pr-[10px] pl-1 text-[0.7rem] font-black tracking-tighter text-right text-f1-gray/60">
+                        {delta > 0 ? `+${(delta / 1000).toFixed(3)}` : delta === 0 && (ld as any).m_carPosition === 1 ? 'INTERVAL' : ''}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -592,10 +651,28 @@ const Dashboard: React.FC<DashboardProps> = ({
           {activeTab === 'analysis' && (
             <div className="f1-section flex-1 min-w-[800px]">
               <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-                <div>
-                  <h3 className="m-0 text-[0.85rem] font-black text-white uppercase tracking-wider">📊 PERFORMANCE ANALYSIS</h3>
-                  <div className="text-f1-gray text-[0.65rem] font-black mt-1 uppercase opacity-60">Real-time telemetry comparison and delta tracking</div>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <h3 className="m-0 text-[0.85rem] font-black text-white uppercase tracking-wider">📊 PERFORMANCE ANALYSIS</h3>
+                    <div className="text-f1-gray text-[0.65rem] font-black mt-1 uppercase opacity-60">Real-time telemetry comparison and delta tracking</div>
+                  </div>
+                  
+                  <div className="flex bg-black/60 p-1 rounded-md border border-white/10">
+                    <button 
+                      className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'live' ? 'bg-f1-red text-white' : 'text-f1-gray hover:text-white'}`}
+                      onClick={() => setPrimaryDataSource('live')}
+                    >
+                      LIVE TELEMETRY
+                    </button>
+                    <button 
+                      className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'best' ? 'bg-f1-purple text-white' : 'text-f1-gray hover:text-white'}`}
+                      onClick={() => setPrimaryDataSource('best')}
+                    >
+                      YOUR BEST LAP
+                    </button>
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
                   <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
                   <select 
@@ -603,9 +680,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                     value={comparisonCarIndex ?? ""}
                     onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}
                   >
-                    <option value="">PERSONAL BEST LAP</option>
+                    {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
                     {allParticipants.map((p, i) => {
-                      if (!p || i === playerIndex) return null;
+                      if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
                       const hasData = bestLapsTelemetry[i]?.length > 0;
                       return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
                     })}
@@ -614,20 +691,20 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
 
               <TelemetryChart 
-                primaryPoints={currentLapsTelemetry[playerIndex] || []} 
+                primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 trackLength={sessionData?.m_trackLength || 5000} 
-                primaryLabel="LIVE TELEMETRY"
-                secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : "SESSION PERSONAL BEST"}
+                primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
+                secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
               />
 
               <div className="mt-5 grid grid-cols-4 gap-4">
                 {[
-                  { label: 'AVG THROTTLE', value: (currentLapsTelemetry[playerIndex] || []).reduce((acc, p) => acc + p.throttle, 0) / ((currentLapsTelemetry[playerIndex] || []).length || 1) * 100, unit: '%', color: '#00ff00' },
-                  { label: 'AVG BRAKE', value: (currentLapsTelemetry[playerIndex] || []).reduce((acc, p) => acc + p.brake, 0) / ((currentLapsTelemetry[playerIndex] || []).length || 1) * 100, unit: '%', color: '#ff0000' },
-                  { label: 'MAX SPEED', value: Math.max(0, ...(currentLapsTelemetry[playerIndex] || []).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
-                  { label: 'EST. DELTA', value: ((currentLapsTelemetry[playerIndex]?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? 
-                    ((currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].distance) < Math.abs(prev.distance - currentLapsTelemetry[playerIndex][currentLapsTelemetry[playerIndex].length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
+                  { label: 'AVG THROTTLE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.throttle, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#00ff00' },
+                  { label: 'AVG BRAKE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.brake, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#ff0000' },
+                  { label: 'MAX SPEED', value: Math.max(0, ...(primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
+                  { label: 'EST. DELTA', value: (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? 
+                    (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) < Math.abs(prev.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
                 ].map((stat, i) => (
                   <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02]" style={{ borderBottomColor: stat.color }}>
                     <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
