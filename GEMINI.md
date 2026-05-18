@@ -53,5 +53,5 @@ For the best experience, especially with F1 25, the following game settings are 
 
 ### Key Visual Logic
 - **Time Highlighting**: Purple for session-best times, Green for personal-best times.
-- **Track Map**: Uses `localStorage` to persist learned track layouts based on `trackId`.
+- **Distance Widget**: Shows real-time distance in meters to the car ahead and behind, including trend indicators (closing/dropping).
 - **Responsive Design**: Uses a flexible flex-wrap layout to accommodate different screen sizes (especially notebooks) without horizontal scrolling.

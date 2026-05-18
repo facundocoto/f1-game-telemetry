@@ -142,6 +142,7 @@ function App() {
           motionData={motionData}
           sessionData={sessionData}
           playerIndex={playerIndex}
+          isConnected={isConnected}
         />
       </main>
     </div>

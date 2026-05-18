@@ -92,6 +92,7 @@ interface DashboardProps {
   motionData: MotionData | null;
   sessionData: any | null;
   playerIndex: number;
+  isConnected: boolean;
 }
 
 const formatTime = (ms: number) => {
@@ -101,43 +102,75 @@ const formatTime = (ms: number) => {
   return `${m}:${s.padStart(6, '0')}`;
 };
 
+const ChartModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void; 
+  title: string; 
+  children: React.ReactNode 
+}> = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 lg:p-10">
+      <div className="w-full h-full max-w-[1400px] flex flex-col bg-[#08080c] border border-white/10 rounded-[20px] shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden">
+        <div className="flex justify-between items-center p-6 border-b border-white/10">
+          <h3 className="m-0 text-[1.2rem] font-black text-white uppercase tracking-[4px] italic">{title}</h3>
+          <button 
+            onClick={onClose}
+            className="bg-f1-red text-white border-none px-6 py-2 rounded font-black cursor-pointer hover:bg-white hover:text-f1-red transition-all uppercase text-[0.8rem] tracking-widest"
+          >
+            CLOSE [ESC]
+          </button>
+        </div>
+        <div className="flex-1 p-6 overflow-hidden flex items-center justify-center">
+          <div className="w-full">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TelemetryChart: React.FC<{
   primaryPoints: TelemetryPoint[];
   secondaryPoints: TelemetryPoint[];
   trackLength: number;
   primaryLabel: string;
   secondaryLabel: string;
-}> = ({ primaryPoints, secondaryPoints, trackLength, primaryLabel, secondaryLabel }) => {
+  isExpanded?: boolean;
+  onExpand?: () => void;
+}> = ({ primaryPoints, secondaryPoints, trackLength, primaryLabel, secondaryLabel, isExpanded, onExpand }) => {
+  const [hoveredDist, setHoveredDist] = React.useState<number | null>(null);
+  
   const width = 1000;
-  const height = 400;
-  const padding = 30;
-  const chartHeight = (height - padding * 4) / 3;
+  const height = isExpanded ? 550 : 450;
+  const padding = 35;
+  const chartSpacing = isExpanded ? 40 : 30;
+  const chartHeight = (height - padding * 2 - chartSpacing * 2) / 3;
 
   const xScale = (dist: number) => (dist / (trackLength || 1)) * (width - padding * 2) + padding;
 
+  const findClosest = (points: TelemetryPoint[], targetDist: number) => {
+    if (points.length === 0) return null;
+    let low = 0, high = points.length - 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (points[mid].distance < targetDist) low = mid + 1;
+      else if (points[mid].distance > targetDist) high = mid - 1;
+      else return points[mid];
+    }
+    const p1 = points[Math.max(0, high)];
+    const p2 = points[Math.min(points.length - 1, low)];
+    if (!p1) return p2;
+    if (!p2) return p1;
+    return Math.abs(p1.distance - targetDist) < Math.abs(p2.distance - targetDist) ? p1 : p2;
+  };
+
   const getDeltaAtDistance = (dist: number) => {
-    if (primaryPoints.length === 0 || secondaryPoints.length === 0) return 0;
-
-    // Simple binary search for closest distance
-    const findClosest = (points: TelemetryPoint[], targetDist: number) => {
-      let low = 0, high = points.length - 1;
-      while (low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        if (points[mid].distance < targetDist) low = mid + 1;
-        else if (points[mid].distance > targetDist) high = mid - 1;
-        else return points[mid];
-      }
-      const p1 = points[Math.max(0, high)];
-      const p2 = points[Math.min(points.length - 1, low)];
-      if (!p1) return p2;
-      if (!p2) return p1;
-      return Math.abs(p1.distance - targetDist) < Math.abs(p2.distance - targetDist) ? p1 : p2;
-    };
-
     const p1 = findClosest(primaryPoints, dist);
     const p2 = findClosest(secondaryPoints, dist);
-
-    return (p1.time - p2.time) / 1000; // Delta in seconds
+    if (!p1 || !p2) return 0;
+    return (p1.time - p2.time) / 1000;
   };
 
   const generatePath = (points: TelemetryPoint[], getY: (p: TelemetryPoint) => number, offset: number) => {
@@ -147,99 +180,204 @@ const TelemetryChart: React.FC<{
     ).join(' ');
   };
 
-  const deltaPoints = Array.from({ length: 100 }).map((_, i) => {
-    const dist = (i / 100) * trackLength;
+  const generateAreaPath = (points: TelemetryPoint[], getY: (p: TelemetryPoint) => number, offset: number) => {
+    if (points.length < 2) return "";
+    const path = generatePath(points, getY, offset);
+    return `${path} L ${xScale(points[points.length - 1].distance)} ${offset + chartHeight} L ${xScale(points[0].distance)} ${offset + chartHeight} Z`;
+  };
+
+  const deltaPoints = Array.from({ length: 150 }).map((_, i) => {
+    const dist = (i / 150) * trackLength;
     return { distance: dist, delta: getDeltaAtDistance(dist) };
   });
 
   const maxDelta = Math.max(0.5, Math.max(...deltaPoints.map(p => Math.abs(p.delta))));
 
-  const generateDeltaPath = () => {
+  const generateDeltaPath = (type: 'positive' | 'negative' | 'line') => {
     if (deltaPoints.length < 2) return "";
-    return deltaPoints.map((p, i) =>
-      `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${padding + chartHeight/2 - (p.delta / maxDelta) * (chartHeight/2)}`
-    ).join(' ');
+    const baseY = padding + chartHeight / 2;
+    
+    if (type === 'line') {
+      return deltaPoints.map((p, i) =>
+        `${i === 0 ? 'M' : 'L'} ${xScale(p.distance)} ${baseY - (p.delta / maxDelta) * (chartHeight / 2)}`
+      ).join(' ');
+    }
+
+    const points = deltaPoints.map(p => {
+      const y = baseY - (p.delta / maxDelta) * (chartHeight / 2);
+      // For area, we clamp to the base line depending on type
+      const clampedY = type === 'positive' ? Math.min(baseY, y) : Math.max(baseY, y);
+      return { x: xScale(p.distance), y: clampedY };
+    });
+
+    const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    return `${path} L ${xScale(deltaPoints[deltaPoints.length - 1].distance)} ${baseY} L ${xScale(deltaPoints[0].distance)} ${baseY} Z`;
   };
 
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * (width + 45);
+    const dist = ((x - padding) / (width - padding * 2)) * trackLength;
+    setHoveredDist(Math.max(0, Math.min(trackLength, dist)));
+  };
+
+  const hoveredP1 = hoveredDist !== null ? findClosest(primaryPoints, hoveredDist) : null;
+  const hoveredP2 = hoveredDist !== null ? findClosest(secondaryPoints, hoveredDist) : null;
+  const hoveredDelta = hoveredDist !== null ? getDeltaAtDistance(hoveredDist) : 0;
+
   return (
-    <div className="bg-[#050508] border border-[#222] rounded-lg p-5 mt-2.5 w-full">
-      <div className="flex gap-8 mb-5 justify-center border-b border-white/5 pb-3">
-        <span className="flex items-center gap-2 text-[0.7rem] font-black text-white"><i className="w-3 h-3 rounded-full bg-f1-red"></i> {primaryLabel}</span>
-        <span className="flex items-center gap-2 text-[0.7rem] font-black text-f1-gray"><i className="w-3 h-3 rounded-full bg-white/30 border border-white/50"></i> {secondaryLabel}</span>
-        <span className="flex items-center gap-2 text-[0.7rem] font-black text-f1-purple"><i className="w-3 h-1 bg-f1-purple"></i> TIME DELTA</span>
+    <div className="bg-[#08080c] border border-white/10 rounded-[15px] p-6 mt-4 w-full shadow-2xl relative overflow-hidden group">
+      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-f1-red to-transparent opacity-50"></div>
+      
+      {!isExpanded && onExpand && (
+        <button 
+          onClick={onExpand}
+          className="absolute top-4 right-4 z-10 bg-f1-red text-white border-none px-4 py-2 rounded font-black cursor-pointer hover:scale-105 active:scale-95 transition-all uppercase text-[0.7rem] tracking-[2px] shadow-[0_4px_15px_rgba(225,6,0,0.4)] flex items-center gap-2 opacity-0 group-hover:opacity-100"
+        >
+          <span>⛶</span> FULL-SCREEN ANALYSIS
+        </button>
+      )}
+
+      <div className="flex flex-wrap gap-8 mb-6 justify-center items-center bg-black/30 py-3 rounded-lg border border-white/5">
+        <div className="flex items-center gap-2 px-3 border-r border-white/10">
+          <i className="w-3 h-3 rounded-full bg-f1-red shadow-[0_0_8px_#e10600]"></i>
+          <span className="text-[0.65rem] font-black text-white uppercase tracking-wider">{primaryLabel}</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 border-r border-white/10">
+          <i className="w-3 h-3 rounded-full bg-white/40 border border-white/60"></i>
+          <span className="text-[0.65rem] font-black text-f1-gray uppercase tracking-wider">{secondaryLabel}</span>
+        </div>
+        <div className="flex items-center gap-2 px-3">
+          <i className="w-4 h-1 bg-f1-purple shadow-[0_0_8px_#b131ff]"></i>
+          <span className="text-[0.65rem] font-black text-f1-purple uppercase tracking-wider">TIME DELTA</span>
+        </div>
       </div>
 
-      <svg viewBox={`0 0 ${width + 45} ${height}`} className="w-full h-auto block">
-        {/* DELTA CHART (Top) */}
+      <svg 
+        viewBox={`0 0 ${width + 45} ${height}`} 
+        className="w-full h-auto block cursor-crosshair"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHoveredDist(null)}
+      >
+        <defs>
+          <linearGradient id="speedGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#e10600" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#e10600" stopOpacity="0.0" />
+          </linearGradient>
+          <linearGradient id="positiveDeltaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ff0000" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#ff0000" stopOpacity="0.05" />
+          </linearGradient>
+          <linearGradient id="negativeDeltaGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#00ff00" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#00ff00" stopOpacity="0.3" />
+          </linearGradient>
+        </defs>
+
+        {/* DELTA CHART */}
         <g>
-          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">TIME DELTA (SEC)</text>
-          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
+          <text x={padding} y={padding - 10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">TIME DELTA (SEC)</text>
+          
+          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
           <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#444" strokeDasharray="5,5" />
-          <path d={generateDeltaPath()} fill="none" stroke="#b131ff" strokeWidth="2" />
-          <text x={width - padding + 5} y={padding + 10} fill="#666" fontSize="8" fontWeight="black">+{maxDelta.toFixed(1)}s</text>
-          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">0.0s</text>
-          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">-{maxDelta.toFixed(1)}s</text>
-        </g>
-
-        {/* SPEED CHART (Middle) */}
-        <g transform={`translate(0, ${chartHeight + padding})`}>
-          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">SPEED (KM/H)</text>
-          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
           
-          {/* Y-Axis Labels */}
-          <text x={width - padding + 5} y={padding + 8} fill="#666" fontSize="8" fontWeight="black">350</text>
-          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">175</text>
-          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">0</text>
+          {/* Green Area (Faster / Negative Delta) */}
+          <path d={generateDeltaPath('negative')} fill="url(#negativeDeltaGradient)" />
+          {/* Red Area (Slower / Positive Delta) */}
+          <path d={generateDeltaPath('positive')} fill="url(#positiveDeltaGradient)" />
           
-          {/* Grid lines */}
-          <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
-
-          <path d={generatePath(secondaryPoints, p => p.speed / 350, padding)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4,2" />
-          <path d={generatePath(primaryPoints, p => p.speed / 350, padding)} fill="none" stroke="#e10600" strokeWidth="2" />
+          <path d={generateDeltaPath('line')} fill="none" stroke="#b131ff" strokeWidth="2.5" />
+          
+          <text x={width - padding + 8} y={padding + 8} fill="#ff4444" fontSize="9" fontWeight="black">+{maxDelta.toFixed(2)}s</text>
+          <text x={width - padding + 8} y={padding + chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">0.00</text>
+          <text x={width - padding + 8} y={padding + chartHeight} fill="#44ff44" fontSize="9" fontWeight="black">-{maxDelta.toFixed(2)}s</text>
         </g>
 
-        {/* THROTTLE/BRAKE CHART (Bottom) */}
-        <g transform={`translate(0, ${(chartHeight + padding) * 2})`}>
-          <text x={padding} y={padding - 5} fill="#666" fontSize="10" fontWeight="bold">INPUTS (THROTTLE & BRAKE)</text>
-          <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" />
-
-          {/* Y-Axis Labels */}
-          <text x={width - padding + 5} y={padding + 8} fill="#666" fontSize="8" fontWeight="black">100%</text>
-          <text x={width - padding + 5} y={padding + chartHeight/2 + 3} fill="#666" fontSize="8" fontWeight="black">50%</text>
-          <text x={width - padding + 5} y={padding + chartHeight} fill="#666" fontSize="8" fontWeight="black">0%</text>
-
-          {/* Grid lines */}
-          <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
-
-          {/* Reference */}
-          <path d={generatePath(secondaryPoints, p => p.throttle, padding)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="1" />
-          <path d={generatePath(secondaryPoints, p => p.brake, padding)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="1" />
-
-          {/* Primary */}
-          <path d={generatePath(primaryPoints, p => p.throttle, padding)} fill="none" stroke="#00ff00" strokeWidth="2" />
-          <path d={generatePath(primaryPoints, p => p.brake, padding)} fill="none" stroke="#ff0000" strokeWidth="2" />
+        {/* SPEED CHART */}
+        <g transform={`translate(0, ${chartHeight + padding + chartSpacing})`}>
+          <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">SPEED (KM/H)</text>
+          
+          <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
+          
+          <path d={generateAreaPath(primaryPoints, p => p.speed / 350, 0)} fill="url(#speedGradient)" />
+          <path d={generatePath(secondaryPoints, p => p.speed / 350, 0)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeDasharray="4,2" />
+          <path d={generatePath(primaryPoints, p => p.speed / 350, 0)} fill="none" stroke="#e10600" strokeWidth="2.5" />
+          
+          <text x={width - padding + 8} y={8} fill="#666" fontSize="9" fontWeight="black">350</text>
+          <text x={width - padding + 8} y={chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">175</text>
+          <text x={width - padding + 8} y={chartHeight} fill="#666" fontSize="9" fontWeight="black">0</text>
+          <line x1={padding} y1={chartHeight/2} x2={width-padding} y2={chartHeight/2} stroke="white" strokeOpacity="0.05" />
         </g>
+
+        {/* INPUTS CHART */}
+        <g transform={`translate(0, ${(chartHeight + padding + chartSpacing) * 2 - padding})`}>
+          <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">INPUTS (THROTTLE & BRAKE)</text>
+          
+          <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
+
+          {/* Reference Inputs */}
+          <path d={generatePath(secondaryPoints, p => p.throttle, 0)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="1.5" />
+          <path d={generatePath(secondaryPoints, p => p.brake, 0)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="1.5" />
+
+          {/* Primary Inputs */}
+          <path d={generateAreaPath(primaryPoints, p => p.throttle, 0)} fill="rgba(0, 255, 0, 0.05)" />
+          <path d={generatePath(primaryPoints, p => p.throttle, 0)} fill="none" stroke="#00ff00" strokeWidth="2.5" />
+          <path d={generatePath(primaryPoints, p => p.brake, 0)} fill="none" stroke="#ff0000" strokeWidth="2.5" />
+
+          <text x={width - padding + 8} y={8} fill="#666" fontSize="9" fontWeight="black">100%</text>
+          <text x={width - padding + 8} y={chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">50%</text>
+          <text x={width - padding + 8} y={chartHeight} fill="#666" fontSize="9" fontWeight="black">0%</text>
+          <line x1={padding} y1={chartHeight/2} x2={width-padding} y2={chartHeight/2} stroke="white" strokeOpacity="0.05" />
+        </g>
+
+        {/* Sync Cursor & Value Tooltip */}
+        {hoveredDist !== null && (
+          <g>
+            <line x1={xScale(hoveredDist)} y1={padding} x2={xScale(hoveredDist)} y2={height - padding} stroke="#fff" strokeWidth="1.5" strokeDasharray="4,2" />
+            <circle cx={xScale(hoveredDist)} cy={height - padding} r="4" fill="#fff" />
+            
+            {/* Speed Value Tooltip */}
+            {hoveredP1 && (
+              <g transform={`translate(${xScale(hoveredDist)}, ${chartHeight + padding + chartSpacing + chartHeight - (hoveredP1.speed / 350 * chartHeight)})`}>
+                <circle r="4" fill="#e10600" stroke="#fff" strokeWidth="2" />
+                <rect x="8" y="-12" width="50" height="24" rx="4" fill="rgba(225,6,0,0.9)" />
+                <text x="12" y="4" fill="#fff" fontSize="10" fontWeight="900">{Math.round(hoveredP1.speed)}</text>
+              </g>
+            )}
+
+            {/* Delta Value Tooltip */}
+            <g transform={`translate(${xScale(hoveredDist)}, ${padding + chartHeight/2 - (getDeltaAtDistance(hoveredDist) / maxDelta * (chartHeight/2))})`}>
+              <circle r="4" fill="#b131ff" stroke="#fff" strokeWidth="2" />
+              <rect x="8" y="-12" width="60" height="24" rx="4" fill="rgba(177,49,255,0.9)" />
+              <text x="12" y="4" fill="#fff" fontSize="10" fontWeight="900">
+                {getDeltaAtDistance(hoveredDist) > 0 ? '+' : ''}{getDeltaAtDistance(hoveredDist).toFixed(3)}s
+              </text>
+            </g>
+          </g>
+        )}
 
         {/* Distance markers */}
-        <text x={padding} y={height - 5} fill="#666" fontSize="10" fontWeight="black">START</text>
-        
-        {Array.from({ length: Math.floor(trackLength / 1000) }).map((_, i) => {
-          const dist = (i + 1) * 1000;
-          const x = xScale(dist);
-          if (x > width - padding - 50) return null; // Don't overlap with FINISH
-          return (
-            <g key={i}>
-              <line x1={x} y1={padding} x2={x} y2={height - padding} stroke="#ffffff" strokeOpacity="0.05" strokeDasharray="2,2" />
-              <text x={x} y={height - 5} fill="#444" fontSize="8" textAnchor="middle" fontWeight="black">{i + 1}KM</text>
-            </g>
-          );
-        })}
-
-        <text x={width - padding} y={height - 5} fill="#666" fontSize="10" textAnchor="end" fontWeight="black">FINISH</text>
+        <g transform={`translate(0, ${height - 10})`}>
+          <text x={padding} y={0} fill="#555" fontSize="10" fontWeight="900">START</text>
+          {Array.from({ length: Math.floor(trackLength / 1000) }).map((_, i) => {
+            const dist = (i + 1) * 1000;
+            const x = xScale(dist);
+            if (x > width - padding - 60) return null;
+            return (
+              <g key={i}>
+                <line x1={x} y1={-(height - padding * 2)} x2={x} y2={0} stroke="white" strokeOpacity="0.05" strokeDasharray="4,4" />
+                <text x={x} y={0} fill="#555" fontSize="10" textAnchor="middle" fontWeight="900" className="italic">{i + 1}KM</text>
+              </g>
+            );
+          })}
+          <text x={width - padding} y={0} fill="#555" fontSize="10" textAnchor="end" fontWeight="900">FINISH</text>
+        </g>
       </svg>
     </div>
   );
 };
+
 const RPMBar: React.FC<{ rpm: number; maxRpm: number }> = ({ rpm, maxRpm }) => {
   const numSegments = 20;
   const percentage = Math.min((rpm / (maxRpm || 13500)), 1);
@@ -289,72 +427,191 @@ const GForceRadar: React.FC<{ lateral: number; longitudinal: number }> = ({ late
   );
 };
 
-const CircuitMap: React.FC<{ motionData: MotionData | null; allParticipants: (Participant | null)[]; playerIndex: number; trackId: number }> = ({ motionData, allParticipants, playerIndex, trackId }) => {
-  const [learnedPath, setLearnedPath] = React.useState<{ x: number, z: number }[]>([]);
-  const [currentPath, setCurrentPath] = React.useState<{ x: number, z: number }[]>([]);
-  
-  React.useEffect(() => {
-    const saved = localStorage.getItem(`f1_track_${trackId}`);
-    if (saved) try { setLearnedPath(JSON.parse(saved)); } catch (e) { console.error(e); }
-    else setLearnedPath([]);
-  }, [trackId]);
+const DistanceRow: React.FC<{ 
+  label: string; 
+  participant: Participant | null; 
+  distance: number; 
+  color: string 
+}> = ({ label, participant, distance, color }) => {
+  const [prevDist, setPrevDist] = React.useState(distance);
+  const [trend, setTrend] = React.useState<'closing' | 'dropping' | 'stable'>('stable');
 
   React.useEffect(() => {
-    if (motionData && motionData.m_carMotionData[playerIndex]) {
-      const { m_worldPositionX, m_worldPositionZ } = motionData.m_carMotionData[playerIndex];
-      setCurrentPath(prev => {
-        const last = prev[prev.length - 1];
-        if (!last || Math.sqrt(Math.pow(last.x - m_worldPositionX, 2) + Math.pow(last.z - m_worldPositionZ, 2)) > 5) {
-          const newPath = [...prev, { x: m_worldPositionX, z: m_worldPositionZ }];
-          if (newPath.length > 200 && learnedPath.length === 0) {
-            const first = newPath[0];
-            if (Math.sqrt(Math.pow(first.x - m_worldPositionX, 2) + Math.pow(first.z - m_worldPositionZ, 2)) < 20) {
-              localStorage.setItem(`f1_track_${trackId}`, JSON.stringify(newPath));
-              setLearnedPath(newPath);
-            }
-          }
-          return newPath.slice(-2000);
-        }
-        return prev;
-      });
+    const diff = distance - prevDist;
+    if (Math.abs(diff) > 0.1) {
+      setTrend(diff < 0 ? 'closing' : 'dropping');
+      setPrevDist(distance);
     }
-  }, [motionData, playerIndex, trackId, learnedPath.length]);
-
-  const activePath = learnedPath.length > 0 ? learnedPath : currentPath;
-  if (activePath.length < 2) return <div className="h-[200px] flex items-center justify-center font-black text-f1-gray tracking-widest text-[0.8rem]">📍 RECORDING...</div>;
-
-  const xs = activePath.map(p => p.x);
-  const zs = activePath.map(p => p.z);
-  const minX = Math.min(...xs) - 50;
-  const maxX = Math.max(...xs) + 50;
-  const minZ = Math.min(...zs) - 50;
-  const maxZ = Math.max(...zs) + 50;
-  const width = maxX - minX;
-  const height = maxZ - minZ;
+  }, [distance]);
 
   return (
-    <div className="relative">
-      <svg viewBox={`${minX} ${minZ} ${width} ${height}`} style={{ transform: 'scaleY(-1)' }} className="w-full h-auto max-h-[300px]">
-        <polyline points={activePath.map(p => `${p.x},${p.z}`).join(' ')} fill="none" stroke="#222" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round" />
-        <polyline points={activePath.map(p => `${p.x},${p.z}`).join(' ')} fill="none" stroke="#444" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-        {motionData?.m_carMotionData.map((car, i) => {
-          if (!allParticipants[i]) return null;
-          const isPlayer = i === playerIndex;
-          return (
-            <circle key={i} cx={car.m_worldPositionX} cy={car.m_worldPositionZ} r={isPlayer ? 22 : 12} fill={isPlayer ? "#e10600" : "#888"} stroke="white" strokeWidth={isPlayer ? 4 : 0} />
-          );
-        })}
-      </svg>
-      <button className="absolute bottom-0 right-0 bg-white/5 border border-white/10 text-white font-black text-[0.6rem] px-2 py-1 rounded hover:bg-white/10 transition-colors" onClick={() => { localStorage.removeItem(`f1_track_${trackId}`); setLearnedPath([]); setCurrentPath([]); }}>RESET</button>
+    <div className="flex justify-between items-center py-1">
+      <div className="flex flex-col">
+        <span className="text-[0.6rem] text-f1-gray font-black uppercase tracking-wider">{label}</span>
+        <span className="text-[1.1rem] font-black truncate max-w-[150px]">{participant?.m_name || 'UNKNOWN'}</span>
+      </div>
+      <div className="flex flex-col items-end">
+        <div className="flex items-center gap-3">
+          {trend !== 'stable' && (
+            <span className={`text-[0.65rem] font-black px-1.5 py-0.5 rounded italic ${trend === 'closing' ? 'bg-f1-green/20 text-f1-green' : 'bg-f1-red/20 text-f1-red'}`}>
+              {trend === 'closing' ? '▼ CLOSING' : '▲ DROPPING'}
+            </span>
+          )}
+          <div className="flex items-baseline gap-1">
+            <span className={`text-[2.2rem] font-black leading-none ${color}`}>
+              {Math.abs(distance).toFixed(1)}
+            </span>
+            <span className="text-[0.8rem] font-black text-f1-gray uppercase">M</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DistanceWidget: React.FC<{ 
+  allLapData: (LapData | null)[]; 
+  allParticipants: (Participant | null)[]; 
+  playerIndex: number; 
+  trackLength: number 
+}> = ({ allLapData, allParticipants, playerIndex, trackLength }) => {
+  const playerLd = allLapData[playerIndex];
+  if (!playerLd || !trackLength) return <div className="text-f1-gray italic text-[0.7rem] animate-pulse">Waiting for track data...</div>;
+
+  const playerPos = playerLd.m_carPosition;
+  const carAheadIdx = allLapData.findIndex(ld => ld && ld.m_carPosition === playerPos - 1);
+  const carBehindIdx = allLapData.findIndex(ld => ld && ld.m_carPosition === playerPos + 1);
+
+  const carAhead = carAheadIdx !== -1 ? { 
+    ld: allLapData[carAheadIdx]!, 
+    p: allParticipants[carAheadIdx] 
+  } : null;
+  
+  const carBehind = carBehindIdx !== -1 ? { 
+    ld: allLapData[carBehindIdx]!, 
+    p: allParticipants[carBehindIdx] 
+  } : null;
+
+  const calculateDistance = (ld1: LapData, ld2: LapData) => {
+    const d1 = (ld1.m_currentLapNum - 1) * trackLength + ld1.m_lapDistance;
+    const d2 = (ld2.m_currentLapNum - 1) * trackLength + ld2.m_lapDistance;
+    return d1 - d2;
+  };
+
+  return (
+    <div className="flex flex-col gap-5 py-2">
+      {carAhead ? (
+        <DistanceRow 
+          label="Car Ahead" 
+          participant={carAhead.p} 
+          distance={calculateDistance(carAhead.ld, playerLd)} 
+          color="text-f1-green"
+        />
+      ) : (
+        <div className="bg-f1-yellow/10 p-4 border-l-4 border-f1-yellow">
+          <div className="text-f1-yellow font-black text-[1.2rem] italic">P1 - RACE LEADER</div>
+          <div className="text-f1-gray text-[0.6rem] font-black uppercase mt-1">Maintaining Gap</div>
+        </div>
+      )}
+      
+      <div className="h-[1px] bg-white/10 w-full shadow-[0_1px_0_rgba(255,255,255,0.05)]"></div>
+
+      {carBehind ? (
+        <DistanceRow 
+          label="Car Behind" 
+          participant={carBehind.p} 
+          distance={calculateDistance(playerLd, carBehind.ld)} 
+          color="text-f1-red"
+        />
+      ) : (
+        <div className="bg-white/5 p-4 border-l-4 border-f1-gray">
+          <div className="text-white font-black text-[1.2rem] italic uppercase">Back of the Pack</div>
+          <div className="text-f1-gray text-[0.6rem] font-black uppercase mt-1">No Immediate Threat</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+const TyreWidget: React.FC<{ 
+  telemetry: TelemetryData | null; 
+  carStatus: CarStatus | null; 
+  carDamage: CarDamage | null; 
+}> = ({ telemetry, carStatus, carDamage }) => {
+  const getCompoundName = (compound: number) => {
+    switch(compound) {
+      case 16: return { name: 'SOFT', color: '#e10600' };
+      case 17: return { name: 'MEDIUM', color: '#fff200' };
+      case 18: return { name: 'HARD', color: '#ffffff' };
+      case 19: return { name: 'INTER', color: '#00ff00' };
+      case 20: return { name: 'WET', color: '#0000ff' };
+      default: return { name: 'UNKNOWN', color: '#666' };
+    }
+  };
+
+  const compound = getCompoundName(carStatus?.m_visualTyreCompound || 0);
+  const wear = carDamage?.m_tyresWear || [0, 0, 0, 0];
+  const temps = telemetry?.m_tyresSurfaceTemperature || [0, 0, 0, 0];
+  const labels = ['RL', 'RR', 'FL', 'FR'];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between bg-black/40 p-3 rounded border-l-4 shadow-inner" style={{ borderColor: compound.color }}>
+        <div className="flex flex-col">
+          <span className="text-[0.6rem] text-f1-gray font-black uppercase tracking-widest">CURRENT COMPOUND</span>
+          <span className="text-[1.2rem] font-black" style={{ color: compound.color }}>{compound.name}</span>
+        </div>
+        <div className="text-right">
+          <span className="text-[0.6rem] text-f1-gray font-black uppercase tracking-widest">AGE</span>
+          <div className="text-[1.2rem] font-black">{carStatus?.m_tyresAgeLaps || 0} <span className="text-[0.7rem] opacity-50 uppercase">Laps</span></div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {labels.map((label, i) => (
+          <div key={i} className="bg-white/[0.02] p-3 rounded border border-white/5 relative overflow-hidden transition-all hover:bg-white/[0.05]">
+             <div className="absolute bottom-0 left-0 w-full h-1 bg-white/5">
+                <div 
+                  className="h-full bg-f1-red transition-all duration-500" 
+                  style={{ width: `${wear[i]}%`, opacity: 0.3 + (wear[i] / 100) * 0.7 }}
+                ></div>
+             </div>
+             
+             <div className="flex justify-between items-start mb-1">
+               <span className="text-[0.65rem] font-black text-f1-gray">{label}</span>
+               <span className={`text-[0.65rem] font-black ${wear[i] > 70 ? 'text-f1-red animate-pulse' : wear[i] > 40 ? 'text-f1-yellow' : 'text-f1-green'}`}>
+                 {Math.round(wear[i])}% WEAR
+               </span>
+             </div>
+             
+             <div className="flex justify-between items-baseline">
+               <span className={`text-[1.2rem] font-black ${temps[i] > 100 ? 'text-f1-red' : temps[i] > 90 ? 'text-f1-yellow' : 'text-white'}`}>
+                 {Math.round(temps[i])}°C
+               </span>
+               <span className="text-[0.6rem] font-bold text-f1-gray uppercase">Temp</span>
+             </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  telemetry, allTelemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex 
+  telemetry, allTelemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex, isConnected 
 }) => {
   const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
   const [selectedCarIndex, setSelectedCarIndex] = React.useState<number>(playerIndex);
+  const [activeModalChart, setActiveModalChart] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveModalChart(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Telemetry accumulation
   const [bestLapsTelemetry, setBestLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
@@ -438,7 +695,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   }, [activeTab, playerIndex, currentLapsTelemetry, bestLapsTelemetry, comparisonCarIndex]);
 
-  if (!telemetry || !lapData) return <div className="dashboard-empty"><div className="f1-loader"></div><h2>WAITING...</h2></div>;
+  if (!telemetry || !lapData) {
+    return (
+      <div className="dashboard-empty">
+        <div className="f1-loader"></div>
+        <h2 className="animate-pulse">{isConnected ? 'WAITING FOR GAME DATA...' : 'WAITING FOR SERVER...'}</h2>
+        <p className="text-f1-gray text-[0.8rem] mt-2 font-black uppercase tracking-widest opacity-60">
+          {isConnected ? 'Please start the game or enter the track' : 'Telemetry server is currently offline'}
+        </p>
+      </div>
+    );
+  }
 
   const leaderboard = allLapData
     .map((ld, index) => ({ ld, index }))
@@ -593,19 +860,12 @@ const Dashboard: React.FC<DashboardProps> = ({
 
               <div className="flex flex-wrap gap-[15px]">
                 <div className="f1-section flex-1 min-w-[200px]">
-                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🗺️ TRACK RADAR</h3>
-                  <CircuitMap motionData={motionData} allParticipants={allParticipants} playerIndex={playerIndex} trackId={sessionData?.m_trackId ?? -1} />
+                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⏱️ DISTANCE TO CARS</h3>
+                  <DistanceWidget allLapData={allLapData} allParticipants={allParticipants} playerIndex={playerIndex} trackLength={sessionData?.m_trackLength || 0} />
                 </div>
                 <div className="f1-section flex-1 min-w-[200px]">
-                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🛞 TYRE THERMALS</h3>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {((telemetry as any).m_tyresSurfaceTemperature || []).map((temp: number, i: number) => (
-                      <div key={i} className="bg-white/[0.02] p-3 text-center rounded border-b-2" style={{ borderBottomColor: temp > 100 ? 'red' : temp > 90 ? 'orange' : 'transparent' }}>
-                        <div className="text-[0.6rem] text-[#666] font-bold">{['RL', 'RR', 'FL', 'FR'][i]}</div>
-                        <div className="text-[1.2rem] font-black">{temp}°C</div>
-                      </div>
-                    ))}
-                  </div>
+                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🛞 TYRE CONDITION</h3>
+                  <TyreWidget telemetry={telemetry} carStatus={carStatus} carDamage={carDamage} />
                 </div>
               </div>
             </>
@@ -673,20 +933,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
-                  <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
-                  <select 
-                    className="bg-[#050508] border border-white/20 text-white text-[0.7rem] px-3 py-1.5 rounded font-black uppercase outline-none focus:border-f1-red transition-all cursor-pointer hover:bg-black"
-                    value={comparisonCarIndex ?? ""}
-                    onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}
-                  >
-                    {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
-                    {allParticipants.map((p, i) => {
-                      if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
-                      const hasData = bestLapsTelemetry[i]?.length > 0;
-                      return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
-                    })}
-                  </select>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
+                    <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
+                    <select 
+                      className="bg-[#050508] border border-white/20 text-white text-[0.7rem] px-3 py-1.5 rounded font-black uppercase outline-none focus:border-f1-red transition-all cursor-pointer hover:bg-black"
+                      value={comparisonCarIndex ?? ""}
+                      onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}
+                    >
+                      {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
+                      {allParticipants.map((p, i) => {
+                        if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
+                        const hasData = bestLapsTelemetry[i]?.length > 0;
+                        return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
+                      })}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -696,7 +958,23 @@ const Dashboard: React.FC<DashboardProps> = ({
                 trackLength={sessionData?.m_trackLength || 5000} 
                 primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
                 secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
+                onExpand={() => setActiveModalChart("TELEMETRY COMPARISON")}
               />
+
+              <ChartModal 
+                isOpen={!!activeModalChart} 
+                onClose={() => setActiveModalChart(null)} 
+                title={activeModalChart || ""}
+              >
+                <TelemetryChart 
+                  primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+                  secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+                  trackLength={sessionData?.m_trackLength || 5000} 
+                  primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
+                  secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
+                  isExpanded={true}
+                />
+              </ChartModal>
 
               <div className="mt-5 grid grid-cols-4 gap-4">
                 {[
@@ -722,7 +1000,19 @@ const Dashboard: React.FC<DashboardProps> = ({
 
           {activeTab === 'sectors' && (
             <div className="f1-section flex-1">
-              <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⏱️ DETAILED LAP HISTORY - {(allParticipants[selectedCarIndex] as any)?.m_name}</h3>
+              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
+                <h3 className="m-0 text-[0.75rem] font-black text-f1-gray uppercase">⏱️ DETAILED LAP HISTORY - {(allParticipants[selectedCarIndex] as any)?.m_name}</h3>
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-f1-purple shadow-[0_0_8px_#b131ff]"></div>
+                    <span className="text-[0.6rem] font-black text-f1-purple uppercase tracking-widest">Session Best</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-f1-green shadow-[0_0_8px_#00ff00]"></div>
+                    <span className="text-[0.6rem] font-black text-f1-green uppercase tracking-widest">Personal Best</span>
+                  </div>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead><tr className="text-f1-gray text-[0.7rem] uppercase font-black text-left border-b border-white/5"><th className="p-2.5">LAP</th><th className="p-2.5">SECTOR 1</th><th className="p-2.5">SECTOR 2</th><th className="p-2.5">SECTOR 3</th><th className="p-2.5">LAP TIME</th></tr></thead>
