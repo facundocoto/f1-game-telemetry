@@ -78,6 +78,9 @@ export interface TelemetryPoint {
   brake: number;
   speed: number;
   time: number;
+  gear: number;
+  rpm: number;
+  ers: number;
 }
 
 interface DashboardProps {
@@ -85,6 +88,7 @@ interface DashboardProps {
   allTelemetry: (TelemetryData | null)[];
   lapData: LapData | null;
   carStatus: CarStatus | null;
+  allCarStatus: (CarStatus | null)[];
   carDamage: CarDamage | null;
   allParticipants: (Participant | null)[];
   allLapData: (LapData | null)[];
@@ -112,7 +116,7 @@ const ChartModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/95 backdrop-blur-md p-4 lg:p-10">
       <div className="w-full h-full max-w-[1400px] flex flex-col bg-[#08080c] border border-white/10 rounded-[20px] shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden">
-        <div className="flex justify-between items-center p-6 border-b border-white/10">
+        <div className="flex justify-between items-center p-6 border-b border-white/10 flex-shrink-0">
           <h3 className="m-0 text-[1.2rem] font-black text-white uppercase tracking-[4px] italic">{title}</h3>
           <button 
             onClick={onClose}
@@ -121,8 +125,8 @@ const ChartModal: React.FC<{
             CLOSE [ESC]
           </button>
         </div>
-        <div className="flex-1 p-6 overflow-hidden flex items-center justify-center">
-          <div className="w-full">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <div className="min-h-full flex flex-col">
             {children}
           </div>
         </div>
@@ -143,10 +147,11 @@ const TelemetryChart: React.FC<{
   const [hoveredDist, setHoveredDist] = React.useState<number | null>(null);
   
   const width = 1000;
-  const height = isExpanded ? 550 : 450;
+  const height = isExpanded ? 1200 : 750;
   const padding = 35;
-  const chartSpacing = isExpanded ? 40 : 30;
-  const chartHeight = (height - padding * 2 - chartSpacing * 2) / 3;
+  const chartSpacing = 20;
+  const numCharts = 6;
+  const chartHeight = (height - padding * 2 - chartSpacing * (numCharts - 1)) / numCharts;
 
   const xScale = (dist: number) => (dist / (trackLength || 1)) * (width - padding * 2) + padding;
 
@@ -205,7 +210,6 @@ const TelemetryChart: React.FC<{
 
     const points = deltaPoints.map(p => {
       const y = baseY - (p.delta / maxDelta) * (chartHeight / 2);
-      // For area, we clamp to the base line depending on type
       const clampedY = type === 'positive' ? Math.min(baseY, y) : Math.max(baseY, y);
       return { x: xScale(p.distance), y: clampedY };
     });
@@ -227,7 +231,7 @@ const TelemetryChart: React.FC<{
   const hoveredDelta = hoveredDist !== null ? getDeltaAtDistance(hoveredDist) : 0;
 
   return (
-    <div className="bg-[#08080c] border border-white/10 rounded-[15px] p-6 mt-4 w-full shadow-2xl relative overflow-hidden group">
+    <div className={`bg-[#08080c] border border-white/10 rounded-[15px] p-6 mt-4 w-full shadow-2xl relative group ${isExpanded ? 'overflow-visible' : 'overflow-hidden'}`}>
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-f1-red to-transparent opacity-50"></div>
       
       {!isExpanded && onExpand && (
@@ -278,64 +282,64 @@ const TelemetryChart: React.FC<{
         {/* DELTA CHART */}
         <g>
           <text x={padding} y={padding - 10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">TIME DELTA (SEC)</text>
-          
           <rect x={padding} y={padding} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
           <line x1={padding} y1={padding + chartHeight/2} x2={width-padding} y2={padding + chartHeight/2} stroke="#444" strokeDasharray="5,5" />
-          
-          {/* Green Area (Faster / Negative Delta) */}
           <path d={generateDeltaPath('negative')} fill="url(#negativeDeltaGradient)" />
-          {/* Red Area (Slower / Positive Delta) */}
           <path d={generateDeltaPath('positive')} fill="url(#positiveDeltaGradient)" />
-          
           <path d={generateDeltaPath('line')} fill="none" stroke="#b131ff" strokeWidth="2.5" />
-          
-          <text x={width - padding + 8} y={padding + 8} fill="#ff4444" fontSize="9" fontWeight="black">+{maxDelta.toFixed(2)}s</text>
-          <text x={width - padding + 8} y={padding + chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">0.00</text>
-          <text x={width - padding + 8} y={padding + chartHeight} fill="#44ff44" fontSize="9" fontWeight="black">-{maxDelta.toFixed(2)}s</text>
         </g>
 
         {/* SPEED CHART */}
         <g transform={`translate(0, ${chartHeight + padding + chartSpacing})`}>
           <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">SPEED (KM/H)</text>
-          
           <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
-          
           <path d={generateAreaPath(primaryPoints, p => p.speed / 350, 0)} fill="url(#speedGradient)" />
           <path d={generatePath(secondaryPoints, p => p.speed / 350, 0)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeDasharray="4,2" />
           <path d={generatePath(primaryPoints, p => p.speed / 350, 0)} fill="none" stroke="#e10600" strokeWidth="2.5" />
-          
-          <text x={width - padding + 8} y={8} fill="#666" fontSize="9" fontWeight="black">350</text>
-          <text x={width - padding + 8} y={chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">175</text>
-          <text x={width - padding + 8} y={chartHeight} fill="#666" fontSize="9" fontWeight="black">0</text>
-          <line x1={padding} y1={chartHeight/2} x2={width-padding} y2={chartHeight/2} stroke="white" strokeOpacity="0.05" />
         </g>
 
         {/* INPUTS CHART */}
-        <g transform={`translate(0, ${(chartHeight + padding + chartSpacing) * 2 - padding})`}>
+        <g transform={`translate(0, ${(chartHeight + chartSpacing) * 2 + padding})`}>
           <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">INPUTS (THROTTLE & BRAKE)</text>
-          
           <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
-
-          {/* Reference Inputs */}
           <path d={generatePath(secondaryPoints, p => p.throttle, 0)} fill="none" stroke="rgba(0, 255, 0, 0.15)" strokeWidth="1.5" />
           <path d={generatePath(secondaryPoints, p => p.brake, 0)} fill="none" stroke="rgba(255, 0, 0, 0.15)" strokeWidth="1.5" />
-
-          {/* Primary Inputs */}
           <path d={generateAreaPath(primaryPoints, p => p.throttle, 0)} fill="rgba(0, 255, 0, 0.05)" />
           <path d={generatePath(primaryPoints, p => p.throttle, 0)} fill="none" stroke="#00ff00" strokeWidth="2.5" />
           <path d={generatePath(primaryPoints, p => p.brake, 0)} fill="none" stroke="#ff0000" strokeWidth="2.5" />
+        </g>
 
+        {/* RPM CHART */}
+        <g transform={`translate(0, ${(chartHeight + chartSpacing) * 3 + padding})`}>
+          <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">ENGINE RPM</text>
+          <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
+          <path d={generatePath(secondaryPoints, p => p.rpm / 15000, 0)} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="2,2" />
+          <path d={generatePath(primaryPoints, p => p.rpm / 15000, 0)} fill="none" stroke="#fff" strokeWidth="1.5" />
+        </g>
+
+        {/* GEAR CHART */}
+        <g transform={`translate(0, ${(chartHeight + chartSpacing) * 4 + padding})`}>
+          <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">GEAR</text>
+          <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
+          <path d={generatePath(secondaryPoints, p => p.gear / 8, 0)} fill="none" stroke="rgba(255,255,0,0.2)" strokeWidth="1.5" strokeDasharray="3,3" />
+          <path d={generatePath(primaryPoints, p => p.gear / 8, 0)} fill="none" stroke="#fff200" strokeWidth="2" />
+        </g>
+
+        {/* ERS CHART */}
+        <g transform={`translate(0, ${(chartHeight + chartSpacing) * 5 + padding})`}>
+          <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">ERS ENERGY (%)</text>
+          <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
+          <path d={generatePath(secondaryPoints, p => p.ers / 4000000, 0)} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4,2" />
+          <path d={generatePath(primaryPoints, p => p.ers / 4000000, 0)} fill="none" stroke="#ffb800" strokeWidth="2.5" />
           <text x={width - padding + 8} y={8} fill="#666" fontSize="9" fontWeight="black">100%</text>
-          <text x={width - padding + 8} y={chartHeight/2 + 3} fill="#666" fontSize="9" fontWeight="black">50%</text>
           <text x={width - padding + 8} y={chartHeight} fill="#666" fontSize="9" fontWeight="black">0%</text>
-          <line x1={padding} y1={chartHeight/2} x2={width-padding} y2={chartHeight/2} stroke="white" strokeOpacity="0.05" />
         </g>
 
         {/* Sync Cursor & Value Tooltip */}
         {hoveredDist !== null && (
           <g>
-            <line x1={xScale(hoveredDist)} y1={padding} x2={xScale(hoveredDist)} y2={height - padding} stroke="#fff" strokeWidth="1.5" strokeDasharray="4,2" />
-            <circle cx={xScale(hoveredDist)} cy={height - padding} r="4" fill="#fff" />
+            <line x1={xScale(hoveredDist)} y1={padding} x2={xScale(hoveredDist)} y2={height - padding - 20} stroke="#fff" strokeWidth="1.5" strokeDasharray="4,2" />
+            <circle cx={xScale(hoveredDist)} cy={height - padding - 20} r="4" fill="#fff" />
             
             {/* Speed Value Tooltip */}
             {hoveredP1 && (
@@ -343,6 +347,20 @@ const TelemetryChart: React.FC<{
                 <circle r="4" fill="#e10600" stroke="#fff" strokeWidth="2" />
                 <rect x="8" y="-12" width="50" height="24" rx="4" fill="rgba(225,6,0,0.9)" />
                 <text x="12" y="4" fill="#fff" fontSize="10" fontWeight="900">{Math.round(hoveredP1.speed)}</text>
+              </g>
+            )}
+
+            {/* Gear/RPM/ERS Tooltip */}
+            {hoveredP1 && (
+              <g transform={`translate(${xScale(hoveredDist)}, ${height - padding - 85})`}>
+                <rect x="8" y="-60" width="130" height="95" rx="4" fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.2)" />
+                <text x="15" y="-42" fill="#e10600" fontSize="9" fontWeight="900" className="uppercase tracking-tighter">YOU | G:{hoveredP1.gear} | {Math.round(hoveredP1.rpm)} RPM | ERS: {Math.round(hoveredP1.ers/4000000*100)}%</text>
+                {hoveredP2 && (
+                  <text x="15" y="-26" fill="rgba(255,255,255,0.5)" fontSize="9" fontWeight="900" className="uppercase tracking-tighter">THEM | G:{hoveredP2.gear} | {Math.round(hoveredP2.rpm)} RPM | ERS: {Math.round(hoveredP2.ers/4000000*100)}%</text>
+                )}
+                <line x1="15" y1="-19" x2="125" y2="-19" stroke="white" strokeOpacity="0.1" />
+                <text x="15" y="-4" fill="#b131ff" fontSize="9" fontWeight="900" className="uppercase tracking-tighter">DELTA: {hoveredDelta > 0 ? '+' : ''}{hoveredDelta.toFixed(3)}s</text>
+                <text x="15" y="12" fill="#ffb800" fontSize="9" fontWeight="900" className="uppercase tracking-tighter">DIST: {Math.round(hoveredDist)}m</text>
               </g>
             )}
 
@@ -358,7 +376,7 @@ const TelemetryChart: React.FC<{
         )}
 
         {/* Distance markers */}
-        <g transform={`translate(0, ${height - 10})`}>
+        <g transform={`translate(0, ${height - 15})`}>
           <text x={padding} y={0} fill="#555" fontSize="10" fontWeight="900">START</text>
           {Array.from({ length: Math.floor(trackLength / 1000) }).map((_, i) => {
             const dist = (i + 1) * 1000;
@@ -366,7 +384,7 @@ const TelemetryChart: React.FC<{
             if (x > width - padding - 60) return null;
             return (
               <g key={i}>
-                <line x1={x} y1={-(height - padding * 2)} x2={x} y2={0} stroke="white" strokeOpacity="0.05" strokeDasharray="4,4" />
+                <line x1={x} y1={-(height - padding * 2 - 20)} x2={x} y2={0} stroke="white" strokeOpacity="0.05" strokeDasharray="4,4" />
                 <text x={x} y={0} fill="#555" fontSize="10" textAnchor="middle" fontWeight="900" className="italic">{i + 1}KM</text>
               </g>
             );
@@ -599,7 +617,8 @@ const TyreWidget: React.FC<{
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  telemetry, allTelemetry, lapData, carStatus, carDamage, allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex, isConnected 
+  telemetry, allTelemetry, lapData, carStatus, allCarStatus, carDamage, 
+  allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex, isConnected 
 }) => {
   const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
   const [selectedCarIndex, setSelectedCarIndex] = React.useState<number>(playerIndex);
@@ -625,7 +644,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   // Handle Telemetry Collection for all cars
   React.useEffect(() => {
-    if (!allTelemetry || !allLapData) return;
+    if (!allTelemetry || !allLapData || !allCarStatus) return;
 
     allLapData.forEach((ld, idx) => {
       if (!ld || !allTelemetry[idx]) return;
@@ -659,12 +678,16 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Add point every 5 meters
       if (currentDist > lastDist + 5) {
         const tel = allTelemetry[idx] as any;
+        const status = allCarStatus[idx];
         const newPoint: TelemetryPoint = {
           distance: currentDist,
           throttle: tel.m_throttle,
           brake: tel.m_brake,
           speed: tel.m_speed,
-          time: (ld as any).m_currentLapTimeInMS
+          time: (ld as any).m_currentLapTimeInMS,
+          gear: tel.m_gear,
+          rpm: tel.m_engineRPM,
+          ers: status?.m_ersStoreEnergy || 0
         };
 
         if (idx === playerIndex) {
@@ -678,7 +701,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         lastDistancesRef.current[idx] = currentDist;
       }
     });
-  }, [allTelemetry, allLapData]);
+  }, [allTelemetry, allLapData, allCarStatus]);
 
   // Log summary of available telemetry for analysis
   React.useEffect(() => {
@@ -759,6 +782,28 @@ const Dashboard: React.FC<DashboardProps> = ({
   const scStatus = sessionData?.m_safetyCarStatus;
   const progressPct = Math.min(100, Math.max(0, ((lapData as any).m_lapDistance / (sessionData?.m_trackLength || 1)) * 100));
 
+  const getTrackName = (id: number) => {
+    const tracks: Record<number, string> = {
+      0: 'Melbourne', 1: 'Paul Ricard', 2: 'Shanghai', 3: 'Sakhir', 4: 'Catalunya',
+      5: 'Monaco', 6: 'Montreal', 7: 'Silverstone', 8: 'Hockenheim', 9: 'Hungaroring',
+      10: 'Spa', 11: 'Monza', 12: 'Singapore', 13: 'Suzuka', 14: 'Abu Dhabi',
+      15: 'Texas', 16: 'Brazil', 17: 'Austria', 18: 'Sochi', 19: 'Mexico',
+      20: 'Baku', 21: 'Sakhir Short', 22: 'Silverstone Short', 23: 'Texas Short',
+      24: 'Suzuka Short', 25: 'Hanoi', 26: 'Zandvoort', 27: 'Imola', 28: 'Portimão',
+      29: 'Jeddah', 30: 'Miami', 31: 'Las Vegas', 32: 'Losail'
+    };
+    return tracks[id] || 'Unknown Track';
+  };
+
+  const getSessionTypeName = (type: number) => {
+    const types: Record<number, string> = {
+      0: 'Unknown', 1: 'Practice 1', 2: 'Practice 2', 3: 'Practice 3', 4: 'Short Practice',
+      5: 'Qualifying 1', 6: 'Qualifying 2', 7: 'Qualifying 3', 8: 'Short Qualifying',
+      9: 'One-Shot Qualy', 10: 'Race', 11: 'Race 2', 12: 'Race 3', 13: 'Time Trial'
+    };
+    return types[type] || 'Unknown Session';
+  };
+
   return (
     <div className="app-container">
       <header className="sticky top-0 z-[1000] h-[60px] px-[30px] flex justify-between items-center bg-[linear-gradient(90deg,#15151e_0%,#1a1a24_50%,#15151e_100%)] text-white border-b-2 border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.4)] before:content-[''] before:absolute before:top-0 before:left-0 before:w-full before:h-[3px] before:bg-f1-red">
@@ -769,6 +814,11 @@ const Dashboard: React.FC<DashboardProps> = ({
               {(allParticipants[playerIndex] as any).m_name} #{(allParticipants[playerIndex] as any).m_raceNumber}
             </div>
           )}
+          
+          <div className="hidden lg:flex flex-col border-l border-white/10 pl-6 gap-0.5">
+            <span className="text-[0.6rem] text-f1-gray font-black uppercase tracking-[2px]">{getTrackName(sessionData?.m_trackId ?? -1)}</span>
+            <span className="text-[0.8rem] text-white font-black italic uppercase tracking-tight">{getSessionTypeName(sessionData?.m_sessionType ?? 0)}</span>
+          </div>
         </div>
         
         <div className="flex h-full gap-[5px]">
@@ -778,8 +828,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 ${activeTab === 'sectors' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('sectors')}>LAP HISTORY</button>
         </div>
 
-        <div className="px-[15px] py-1.5 rounded bg-white/5 border border-white/10 font-black text-[0.7rem] flex items-center gap-2 tracking-wider">
-          <i className="w-2 h-2 bg-red-600 rounded-full inline-block shadow-[0_0_10px_#ff0000] animate-pulse"></i>
+        <div className={`px-[15px] py-1.5 rounded border font-black text-[0.7rem] flex items-center gap-2 tracking-wider transition-all duration-300 ${scStatus > 0 ? 'bg-f1-yellow/20 border-f1-yellow/50 text-f1-yellow shadow-[0_0_15px_rgba(255,242,0,0.2)]' : 'bg-white/5 border-white/10 text-white'}`}>
+          <i className={`w-2 h-2 rounded-full inline-block animate-pulse ${scStatus > 0 ? 'bg-f1-yellow shadow-[0_0_10px_#fff200]' : 'bg-red-600 shadow-[0_0_10px_#ff0000]'}`}></i>
           {scStatus > 0 ? (scStatus === 1 ? 'SAFETY CAR' : 'VSC ACTIVE') : 'TRACK CLEAR'}
         </div>
       </header>
@@ -877,7 +927,9 @@ const Dashboard: React.FC<DashboardProps> = ({
               <div className="grid grid-cols-2 gap-5 max-w-[400px] mx-auto mb-8">
                 {[2, 3, 0, 1].map((i) => {
                   const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
-                  const label = ['FRONT LEFT', 'FRONT RIGHT', 'REAR LEFT', 'REAR RIGHT'][i];
+                  // Correct UDP Indices: 0: RL, 1: RR, 2: FL, 3: FR
+                  const labels = ['REAR LEFT', 'REAR RIGHT', 'FRONT LEFT', 'FRONT RIGHT'];
+                  const label = labels[i];
                   return (
                     <div key={i} className="bg-white/[0.03] p-[15px] rounded-lg flex flex-col items-center border border-[#222]">
                       <label className="text-[0.6rem] text-f1-gray font-black mb-2.5 uppercase tracking-wider">{label}</label>

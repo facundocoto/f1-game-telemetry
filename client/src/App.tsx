@@ -14,6 +14,7 @@ function App() {
   const [allTelemetry, setAllTelemetry] = useState<(TelemetryData | null)[]>(new Array(22).fill(null));
   const [lapData, setLapData] = useState<LapData | null>(null);
   const [carStatus, setCarStatus] = useState<CarStatus | null>(null);
+  const [allCarStatus, setAllCarStatus] = useState<(CarStatus | null)[]>(new Array(22).fill(null));
   const [carDamage, setCarDamage] = useState<CarDamage | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
   const [motionData, setMotionData] = useState<MotionData | null>(null);
@@ -82,8 +83,11 @@ function App() {
 
         case 'carStatus':
           const sData = data.m_carStatusData ?? data.carStatusData;
-          if (sData && sData[pIndex]) {
-            setCarStatus(sData[pIndex]);
+          if (sData) {
+            setAllCarStatus(sData);
+            if (sData[pIndex]) {
+              setCarStatus(sData[pIndex]);
+            }
           }
           break;
 
@@ -135,6 +139,7 @@ function App() {
           allTelemetry={allTelemetry}
           lapData={lapData}
           carStatus={carStatus}
+          allCarStatus={allCarStatus}
           carDamage={carDamage}
           allParticipants={allParticipants}
           allLapData={allLapData}
