@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import Dashboard from './components/Dashboard';
 import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory, MotionData } from './components/Dashboard';
 
-const SOCKET_URL = 'http://localhost:3000';
+const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : `http://${window.location.hostname}:3000`;
 
 function App() {
   const [isConnected, setIsConnected] = useState(false);

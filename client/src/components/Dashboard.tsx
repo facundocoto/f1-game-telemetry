@@ -1,4 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LiveTimingWidget } from './widgets/LiveTimingWidget';
+import { PowerTiresWidget } from './widgets/PowerTiresWidget';
+import { AeroDamageWidget } from './widgets/AeroDamageWidget';
+import { SessionDataWidget } from './widgets/SessionDataWidget';
+import { AdvancedTyresWidget } from './widgets/AdvancedTyresWidget';
+import { PowerUnitHealthWidget } from './widgets/PowerUnitHealthWidget';
+import { SuspensionWidget } from './widgets/SuspensionWidget';
+import { MobileBottomNav } from './widgets/MobileBottomNav';
+import type { MobileWidgetType } from './widgets/MobileBottomNav';
 
 export interface TelemetryData {
   m_speed: number;
@@ -11,6 +20,7 @@ export interface TelemetryData {
   m_tyresPressure: number[];
   m_brakesTemperature: number[];
   m_engineTemperature: number;
+  m_suspensionPosition: number[];
 }
 
 export interface LapData {
@@ -39,6 +49,14 @@ export interface CarDamage {
   m_frontLeftWingDamage: number;
   m_frontRightWingDamage: number;
   m_rearWingDamage: number;
+  m_gearBoxDamage: number;
+  m_engineDamage: number;
+  m_engineMGUHWear: number;
+  m_engineESWear: number;
+  m_engineCEWear: number;
+  m_engineICEWear: number;
+  m_engineMGUKWear: number;
+  m_engineTCWear: number;
 }
 
 export interface Participant {
@@ -144,7 +162,7 @@ const TelemetryChart: React.FC<{
   isExpanded?: boolean;
   onExpand?: () => void;
 }> = ({ primaryPoints, secondaryPoints, trackLength, primaryLabel, secondaryLabel, isExpanded, onExpand }) => {
-  const [hoveredDist, setHoveredDist] = React.useState<number | null>(null);
+  const [hoveredDist, setHoveredDist] = useState<number | null>(null);
   
   const width = 1000;
   const height = isExpanded ? 1200 : 750;
@@ -451,10 +469,10 @@ const DistanceRow: React.FC<{
   distance: number; 
   color: string 
 }> = ({ label, participant, distance, color }) => {
-  const [prevDist, setPrevDist] = React.useState(distance);
-  const [trend, setTrend] = React.useState<'closing' | 'dropping' | 'stable'>('stable');
+  const [prevDist, setPrevDist] = useState(distance);
+  const [trend, setTrend] = useState<'closing' | 'dropping' | 'stable'>('stable');
 
-  React.useEffect(() => {
+  useEffect(() => {
     const diff = distance - prevDist;
     if (Math.abs(diff) > 0.1) {
       setTrend(diff < 0 ? 'closing' : 'dropping');
@@ -620,11 +638,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   telemetry, allTelemetry, lapData, carStatus, allCarStatus, carDamage, 
   allParticipants, allLapData, sessionHistory, motionData, sessionData, playerIndex, isConnected 
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
-  const [selectedCarIndex, setSelectedCarIndex] = React.useState<number>(playerIndex);
-  const [activeModalChart, setActiveModalChart] = React.useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
+  const [selectedCarIndex, setSelectedCarIndex] = useState<number>(playerIndex);
+  const [activeModalChart, setActiveModalChart] = useState<string | null>(null);
+  const [mobileActiveWidget, setMobileActiveWidget] = useState<MobileWidgetType>('telemetry');
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setActiveModalChart(null);
     };
@@ -633,17 +652,17 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, []);
 
   // Telemetry accumulation
-  const [bestLapsTelemetry, setBestLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
-  const [currentLapsTelemetry, setCurrentLapsTelemetry] = React.useState<Record<number, TelemetryPoint[]>>({});
-  const [comparisonCarIndex, setComparisonCarIndex] = React.useState<number | null>(null);
-  const [primaryDataSource, setPrimaryDataSource] = React.useState<'live' | 'best'>('live');
-  const lastDistancesRef = React.useRef<Record<number, number>>({});
-  const lastLapNumsRef = React.useRef<Record<number, number>>({});
+  const [bestLapsTelemetry, setBestLapsTelemetry] = useState<Record<number, TelemetryPoint[]>>({});
+  const [currentLapsTelemetry, setCurrentLapsTelemetry] = useState<Record<number, TelemetryPoint[]>>({});
+  const [comparisonCarIndex, setComparisonCarIndex] = useState<number | null>(null);
+  const [primaryDataSource, setPrimaryDataSource] = useState<'live' | 'best'>('live');
+  const lastDistancesRef = useRef<Record<number, number>>({});
+  const lastLapNumsRef = useRef<Record<number, number>>({});
 
-  React.useEffect(() => { setSelectedCarIndex(playerIndex); }, [playerIndex]);
+  useEffect(() => { setSelectedCarIndex(playerIndex); }, [playerIndex]);
 
   // Handle Telemetry Collection for all cars
-  React.useEffect(() => {
+  useEffect(() => {
     if (!allTelemetry || !allLapData || !allCarStatus) return;
 
     allLapData.forEach((ld, idx) => {
@@ -704,7 +723,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [allTelemetry, allLapData, allCarStatus]);
 
   // Log summary of available telemetry for analysis
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeTab === 'analysis') {
       console.log('--- Analysis Tab Debug ---');
       console.log('Player index:', playerIndex);
@@ -821,11 +840,11 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
         
-        <div className="flex h-full gap-[5px]">
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 ${activeTab === 'telemetry' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('telemetry')}>DASHBOARD</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 ${activeTab === 'engineering' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('engineering')}>ENGINEERING</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 ${activeTab === 'analysis' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('analysis')}>ANALYSIS</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 ${activeTab === 'sectors' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('sectors')}>LAP HISTORY</button>
+        <div className="flex h-full gap-[5px] overflow-x-auto hide-scrollbar whitespace-nowrap lg:overflow-visible">
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'telemetry' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('telemetry')}>DASHBOARD</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'engineering' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('engineering')}>ENGINEERING</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'analysis' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('analysis')}>ANALYSIS</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'sectors' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('sectors')}>LAP HISTORY</button>
         </div>
 
         <div className={`px-[15px] py-1.5 rounded border font-black text-[0.7rem] flex items-center gap-2 tracking-wider transition-all duration-300 ${scStatus > 0 ? 'bg-f1-yellow/20 border-f1-yellow/50 text-f1-yellow shadow-[0_0_15px_rgba(255,242,0,0.2)]' : 'bg-white/5 border-white/10 text-white'}`}>
@@ -836,8 +855,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       <div className="w-full h-[3px] bg-[#111]"><div className="h-full bg-white shadow-[0_0_10px_white]" style={{ width: `${progressPct}%` }}></div></div>
 
-      <div className="flex flex-wrap gap-[15px] p-[15px]">
-        <div className="flex-[1_1_340px]">
+      {/* Main Content Grid with Mobile Toggle Logic */}
+      <div className="flex flex-wrap gap-[15px] p-[15px] pb-[80px] lg:pb-[15px]">
+        {/* LEADERBOARD WIDGET */}
+        <div className={`flex-[1_1_340px] ${mobileActiveWidget !== 'leaderboard' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
           <div className="f1-section leaderboard h-full">
             <h3 className="bg-f1-red/10 px-3 py-2 -mx-4 -mt-4 mb-3 border-b border-white/10 uppercase font-black text-[0.75rem] text-f1-gray">🏆 LIVE STANDINGS</h3>
             <div className="flex-1 overflow-y-auto -mx-[5px]">
@@ -867,7 +888,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex-[2_1_500px] order-[-1] lg:order-none">
+        {/* MAIN TABS AREA (Telemetry, Engineering, etc.) */}
+        <div className={`flex-[2_1_500px] order-[-1] lg:order-none ${mobileActiveWidget !== 'telemetry' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
           {activeTab === 'telemetry' && (
             <>
               <div className="bg-[linear-gradient(180deg,#1a1a24_0%,#050508_100%)] rounded-[15px] p-6 mb-[15px] border border-[#333] flex flex-col items-center shadow-[0_20px_50px_rgba(0,0,0,0.9)] relative overflow-hidden">
@@ -922,39 +944,63 @@ const Dashboard: React.FC<DashboardProps> = ({
           )}
 
           {activeTab === 'engineering' && (
-            <div className="f1-section flex-1">
-              <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🏎️ BRAKE TEMPERATURES (OPTIMAL: 400°C - 800°C)</h3>
-              <div className="grid grid-cols-2 gap-5 max-w-[400px] mx-auto mb-8">
-                {[2, 3, 0, 1].map((i) => {
-                  const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
-                  // Correct UDP Indices: 0: RL, 1: RR, 2: FL, 3: FR
-                  const labels = ['REAR LEFT', 'REAR RIGHT', 'FRONT LEFT', 'FRONT RIGHT'];
-                  const label = labels[i];
-                  return (
-                    <div key={i} className="bg-white/[0.03] p-[15px] rounded-lg flex flex-col items-center border border-[#222]">
-                      <label className="text-[0.6rem] text-f1-gray font-black mb-2.5 uppercase tracking-wider">{label}</label>
-                      <div className="w-2.5 h-20 bg-black rounded-full overflow-hidden relative mb-2">
-                        <div 
-                          className="absolute bottom-0 w-full transition-[height,background-color] duration-300" 
-                          style={{ 
-                            height: `${Math.min((temp / 1000) * 100, 100)}%`, 
-                            backgroundColor: temp > 850 ? '#ff0000' : temp > 400 ? '#00ff00' : '#00ffff' 
-                          }}
-                        ></div>
-                      </div>
-                      <span className="text-[0.9rem] font-black font-mono" style={{ color: temp > 850 ? 'red' : temp > 400 ? '#00ff00' : '#00ffff' }}>{temp}°C</span>
-                    </div>
-                  );
-                })}
+            <div className="flex flex-col gap-[15px]">
+              <div className="flex flex-wrap gap-[15px]">
+                {/* ADVANCED TYRES */}
+                <div className="flex-[1_1_300px]">
+                  <AdvancedTyresWidget telemetry={telemetry} />
+                </div>
+                
+                {/* BRAKE TEMPERATURES */}
+                <div className="flex-[1_1_300px] f1-section h-full flex flex-col">
+                  <h3 className="mt-0 mb-4 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">
+                    🏎️ BRAKE TEMPERATURES
+                  </h3>
+                  <div className="flex-1 grid grid-cols-2 gap-5 max-w-[300px] mx-auto w-full content-center">
+                    {[2, 3, 0, 1].map((i) => {
+                      const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
+                      const labels = ['RL', 'RR', 'FL', 'FR'];
+                      return (
+                        <div key={i} className="bg-white/[0.03] p-3 rounded flex flex-col items-center border border-[#222]">
+                          <label className="text-[0.6rem] text-f1-gray font-black mb-2 uppercase tracking-wider">{labels[i]}</label>
+                          <div className="w-2 h-16 bg-black rounded-full overflow-hidden relative mb-2">
+                            <div 
+                              className="absolute bottom-0 w-full transition-[height,background-color] duration-300" 
+                              style={{ 
+                                height: `${Math.min((temp / 1000) * 100, 100)}%`, 
+                                backgroundColor: temp > 850 ? '#ff0000' : temp > 400 ? '#00ff00' : '#00ffff' 
+                              }}
+                            ></div>
+                          </div>
+                          <span className="text-[0.8rem] font-black font-mono" style={{ color: temp > 850 ? 'red' : temp > 400 ? '#00ff00' : '#00ffff' }}>{temp}°C</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
-              <div className="text-center p-[30px] bg-[radial-gradient(circle,#1a1a24_0%,#050508_100%)] rounded-[15px] border border-[#333] mt-5 relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-full before:h-1 before:bg-[linear-gradient(90deg,transparent,#e10600,transparent)]">
-                <label className="text-[0.7rem] text-[#666] font-black tracking-[2px] uppercase">CORE ENGINE THERMALS</label>
-                <div className="text-[5rem] font-black leading-none shadow-[0_0_30px_rgba(255,255,255,0.1)] mt-2" style={{ color: (telemetry as any).m_engineTemperature > 125 ? '#e10600' : 'white' }}>
-                  {(telemetry as any).m_engineTemperature}°C
+              <div className="flex flex-wrap gap-[15px]">
+                {/* POWER UNIT HEALTH */}
+                <div className="flex-[1_1_300px]">
+                  <PowerUnitHealthWidget carDamage={carDamage} />
                 </div>
-                <div className="text-[0.7rem] mt-2.5 font-black uppercase" style={{ color: (telemetry as any).m_engineTemperature > 110 ? '#ffb800' : '#666' }}>
-                  {(telemetry as any).m_engineTemperature > 125 ? '⚠️ OVERHEATING' : (telemetry as any).m_engineTemperature > 110 ? '📈 HIGH TEMPERATURE' : '🟢 OPERATING NOMINAL'}
+
+                {/* SUSPENSION & CORE ENGINE */}
+                <div className="flex-[1_1_300px] flex flex-col gap-[15px]">
+                  <div className="h-[200px]">
+                    <SuspensionWidget telemetry={telemetry} />
+                  </div>
+                  
+                  <div className="text-center p-4 bg-[radial-gradient(circle,#1a1a24_0%,#050508_100%)] rounded-[15px] border border-[#333] relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-full before:h-1 before:bg-[linear-gradient(90deg,transparent,#e10600,transparent)]">
+                    <label className="text-[0.6rem] text-[#666] font-black tracking-[2px] uppercase">CORE ENGINE THERMALS</label>
+                    <div className="text-[3.5rem] font-black leading-none shadow-[0_0_30px_rgba(255,255,255,0.1)] mt-1" style={{ color: (telemetry as any).m_engineTemperature > 125 ? '#e10600' : 'white' }}>
+                      {(telemetry as any).m_engineTemperature}°C
+                    </div>
+                    <div className="text-[0.6rem] mt-1 font-black uppercase" style={{ color: (telemetry as any).m_engineTemperature > 110 ? '#ffb800' : '#666' }}>
+                      {(telemetry as any).m_engineTemperature > 125 ? '⚠️ OVERHEATING' : (telemetry as any).m_engineTemperature > 110 ? '📈 HIGH TEMPERATURE' : '🟢 OPERATING NOMINAL'}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1085,50 +1131,41 @@ const Dashboard: React.FC<DashboardProps> = ({
           )}
         </div>
 
-        <div className="flex-[1_1_340px]">
-          <div className="f1-section">
-            <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⏱️ LIVE TIMING</h3>
-            <div className="flex justify-between py-2 border-b border-white/[0.03]"><span className="text-f1-gray font-bold text-[0.8rem]">POSITION</span><span className="font-black text-white">{(lapData as any).m_carPosition} / 20</span></div>
-            <div className="flex justify-between py-2 border-b border-white/[0.03]"><span className="text-f1-gray font-bold text-[0.8rem]">CURRENT LAP</span><span className="font-black text-white">{(lapData as any).m_currentLapNum}</span></div>
-            <div className="flex justify-between py-2 border-b border-white/[0.03] bg-white/[0.02] px-2 -mx-2"><span className="text-f1-gray font-bold text-[0.8rem]">LAST LAP</span><span className="font-black text-white" style={{color: getTimeColor((lapData as any).m_lastLapTimeInMS, personalBests.lap, sessionBests.lap)}}>{formatTime((lapData as any).m_lastLapTimeInMS)}</span></div>
+        {/* SIDE WIDGETS COLUMN */}
+        <div className="flex-[1_1_340px] flex flex-col gap-[15px]">
+          {/* LIVE TIMING WIDGET */}
+          <div className={`${mobileActiveWidget !== 'timing' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
+            <LiveTimingWidget 
+              lapData={lapData as any} 
+              personalBestLap={personalBests.lap} 
+              sessionBestLap={sessionBests.lap} 
+              getTimeColor={getTimeColor} 
+              formatTime={formatTime} 
+            />
           </div>
 
-          {carStatus && (
-            <div className="f1-section">
-              <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⚡ POWER & TIRES</h3>
-              <div className="mb-4 flex flex-col gap-1"><label className="text-[0.65rem] text-f1-gray font-black uppercase">⛽ FUEL</label><div className="text-[1.1rem] font-black">{(carStatus as any).m_fuelInTank.toFixed(2)} KG <span className="opacity-50 text-[0.8rem]">{(carStatus as any).m_fuelRemainingLaps.toFixed(1)} LAPS</span></div></div>
-              <div className="mb-4 flex flex-col gap-1">
-                <label className="text-[0.65rem] text-f1-gray font-black uppercase">🔋 ERS BATT</label>
-                <div className="h-3.5 bg-black border border-[#333]"><div className="h-full transition-all" style={{ width: `${((carStatus as any).m_ersStoreEnergy / 4000000) * 100}%`, backgroundColor: (carStatus as any).m_ersDeployMode === 3 ? '#fff200' : '#b131ff' }}></div></div>
-                <div className="flex justify-between text-[0.7rem] font-black mt-1">
-                  <span>{Math.round(((carStatus as any).m_ersStoreEnergy / 4000000) * 100)}%</span>
-                  <span style={{color: (carStatus as any).m_ersDeployMode === 3 ? '#fff200' : 'white'}}>
-                    {['OFF', 'MED', 'HOTLAP', 'OVTAKE'][(carStatus as any).m_ersDeployMode]}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1"><label className="text-[0.65rem] text-f1-gray font-black uppercase">🛞 COMPOUND</label><div className="text-[1.1rem] font-black">{(carStatus as any).m_tyresAgeLaps} LAPS - {['SOFT','MED','HARD','WET'][(carStatus as any).m_visualTyreCompound - 16] || '---'}</div></div>
-            </div>
-          )}
-
-          <div className="f1-section">
-            <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⚠️ AERO DAMAGE</h3>
-            <div className="flex flex-col gap-2.5">
-              <div className="flex justify-between"><span className="text-f1-gray font-bold text-[0.8rem]">FRONT WING</span><span className="font-black">L: {(carDamage as any)?.m_frontLeftWingDamage}% | R: {(carDamage as any)?.m_frontRightWingDamage}%</span></div>
-              <div className="flex justify-between pt-2 border-t border-white/[0.03]"><span className="text-f1-gray font-bold text-[0.8rem]">REAR WING</span><span className="font-black">{(carDamage as any)?.m_rearWingDamage}%</span></div>
-            </div>
+          {/* POWER & TIRES WIDGET */}
+          <div className={`${mobileActiveWidget !== 'power' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
+            <PowerTiresWidget carStatus={carStatus} />
           </div>
 
-          <div className="f1-section">
-            <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">☁️ SESSION DATA</h3>
-            <div className="grid grid-cols-3 gap-2.5">
-              <div className="flex flex-col items-center"><label className="text-[0.6rem] text-f1-gray font-black mb-1">🌡️ TRACK</label><span className="font-black text-[1.1rem]">{sessionData?.m_trackTemperature || '--'}°C</span></div>
-              <div className="flex flex-col items-center"><label className="text-[0.6rem] text-f1-gray font-black mb-1">💨 AIR</label><span className="font-black text-[1.1rem]">{sessionData?.m_airTemperature || '--'}°C</span></div>
-              <div className="flex flex-col items-center"><label className="text-[0.6rem] text-f1-gray font-black mb-1">🌧️ RAIN</label><span className="font-black text-[1.1rem]">{sessionData?.m_weatherForecastSamples?.[0]?.m_rainPercentage || '0'}%</span></div>
-            </div>
+          {/* AERO DAMAGE WIDGET */}
+          <div className={`${mobileActiveWidget !== 'aero' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
+            <AeroDamageWidget carDamage={carDamage} />
+          </div>
+
+          {/* SESSION DATA WIDGET */}
+          <div className={`${mobileActiveWidget !== 'session' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
+            <SessionDataWidget sessionData={sessionData} />
           </div>
         </div>
       </div>
+
+      <MobileBottomNav 
+        activeWidget={mobileActiveWidget} 
+        onWidgetSelect={setMobileActiveWidget} 
+        isVisible={true} 
+      />
     </div>
   );
 };
