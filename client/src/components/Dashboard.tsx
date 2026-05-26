@@ -1028,20 +1028,102 @@ const Dashboard: React.FC<DashboardProps> = ({
             </ChartModal>
 
             <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { label: 'AVG THROTTLE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.throttle, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#00ff00' },
-                { label: 'AVG BRAKE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.brake, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#ff0000' },
-                { label: 'MAX SPEED', value: Math.max(0, ...(primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
-                { label: 'EST. DELTA', value: (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) < Math.abs(prev.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
-              ].map((stat, i) => (
-                <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02]" style={{ borderBottomColor: stat.color }}>
-                  <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-[1.4rem] font-black" style={{ color: stat.isDelta ? (stat.value > 0 ? '#ff0000' : '#00ff00') : 'white' }}>{stat.isDelta && stat.value > 0 ? '+' : ''}{stat.value.toFixed(stat.isDelta ? 3 : 1)}</span>
-                    <span className="text-[0.65rem] font-black text-[#444]">{stat.unit}</span>
-                  </div>
-                </div>
-              ))}
+              {(() => {
+                const primaryData = primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || []);
+                const secondaryData = comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : null;
+
+                const secondaryHistory = comparisonCarIndex !== null ? sessionHistory[comparisonCarIndex] : null;
+                const validSecondaryLaps = secondaryHistory 
+                  ? secondaryHistory.m_lapHistoryData.slice(0, secondaryHistory.m_numLaps).filter((l: any) => l.m_lapValidBitFlags & 0x01).map((l: any) => l.m_lapTimeInMS).filter((t: number) => t > 0)
+                  : [];
+                const secondaryBestLap = validSecondaryLaps.length > 0 ? Math.min(...validSecondaryLaps) : 0;
+
+                const pAvgThrottle = primaryData.length ? primaryData.reduce((acc, p) => acc + p.throttle, 0) / primaryData.length * 100 : 0;
+                const sAvgThrottle = secondaryData?.length ? secondaryData.reduce((acc, p) => acc + p.throttle, 0) / secondaryData.length * 100 : 0;
+
+                const pMaxSpeed = primaryData.length ? Math.max(...primaryData.map(p => p.speed)) : 0;
+                const sMaxSpeed = secondaryData?.length ? Math.max(...secondaryData.map(p => p.speed)) : 0;
+
+                const pFullThrottle = primaryData.length ? primaryData.filter(p => p.throttle > 0.9).length / primaryData.length * 100 : 0;
+                const sFullThrottle = secondaryData?.length ? secondaryData.filter(p => p.throttle > 0.9).length / secondaryData.length * 100 : 0;
+
+                return [
+                  {
+                    label: 'BEST LAP TIME',
+                    pVal: personalBests.lap > 0 ? formatTime(personalBests.lap) : '--:--.---',
+                    sVal: secondaryBestLap > 0 ? formatTime(secondaryBestLap) : '--:--.---',
+                    delta: (personalBests.lap > 0 && secondaryBestLap > 0) ? (personalBests.lap - secondaryBestLap) / 1000 : 0,
+                    unit: '',
+                    color: '#b131ff',
+                    invertDeltaColor: true,
+                    isTime: true
+                  },
+                  {
+                    label: 'MAX SPEED',
+                    pVal: pMaxSpeed.toFixed(0),
+                    sVal: sMaxSpeed > 0 ? sMaxSpeed.toFixed(0) : '--',
+                    delta: sMaxSpeed > 0 ? pMaxSpeed - sMaxSpeed : 0,
+                    unit: 'KM/H',
+                    color: '#ffffff',
+                    invertDeltaColor: false,
+                    isTime: false
+                  },
+                  {
+                    label: 'AVG THROTTLE',
+                    pVal: pAvgThrottle.toFixed(1),
+                    sVal: sAvgThrottle > 0 ? sAvgThrottle.toFixed(1) : '--',
+                    delta: sAvgThrottle > 0 ? pAvgThrottle - sAvgThrottle : 0,
+                    unit: '%',
+                    color: '#00ff00',
+                    invertDeltaColor: false,
+                    isTime: false
+                  },
+                  {
+                    label: 'TIME FULL THROTTLE',
+                    pVal: pFullThrottle.toFixed(1),
+                    sVal: sFullThrottle > 0 ? sFullThrottle.toFixed(1) : '--',
+                    delta: sFullThrottle > 0 ? pFullThrottle - sFullThrottle : 0,
+                    unit: '%',
+                    color: '#ffb800',
+                    invertDeltaColor: false,
+                    isTime: false
+                  }
+                ].map((stat, i) => {
+                  const showSecondary = comparisonCarIndex !== null;
+                  const deltaColor = stat.delta === 0 ? '#666' : (stat.invertDeltaColor ? (stat.delta < 0 ? '#00ff00' : '#ff0000') : (stat.delta > 0 ? '#00ff00' : '#ff0000'));
+                  const deltaSign = stat.delta > 0 ? '+' : '';
+                  
+                  return (
+                    <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02] flex flex-col justify-between min-h-[110px]" style={{ borderBottomColor: stat.color }}>
+                      <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
+                      
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-[1.4rem] font-black text-white">{stat.pVal}</span>
+                        <span className="text-[0.65rem] font-black text-[#444]">{stat.unit}</span>
+                      </div>
+
+                      {showSecondary && (
+                        <div className="flex flex-col gap-1 border-t border-white/5 pt-2 mt-auto">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[0.55rem] text-[#888] font-black uppercase truncate max-w-[60px]">{(allParticipants[comparisonCarIndex] as any)?.m_name || 'THEM'}:</span>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-[0.8rem] font-black text-[#aaa]">{stat.sVal}</span>
+                              <span className="text-[0.55rem] font-black text-[#444]">{stat.unit}</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex justify-between items-center">
+                            <span className="text-[0.55rem] text-[#888] font-black uppercase">DIFF:</span>
+                            <span className="text-[0.75rem] font-black" style={{ color: deltaColor }}>
+                              {stat.delta !== 0 ? `${deltaSign}${stat.delta.toFixed(stat.isTime ? 3 : 1)}${stat.unit}` : '-'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         );
