@@ -1,6 +1,6 @@
 import React from 'react';
 
-export type MobileWidgetType = 'leaderboard' | 'telemetry' | 'timing' | 'power' | 'aero' | 'session';
+export type MobileWidgetType = 'hud' | 'race' | 'car' | 'data';
 
 interface MobileBottomNavProps {
   activeWidget: MobileWidgetType;
@@ -12,12 +12,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeWidget, 
   if (!isVisible) return null;
 
   const navItems: { id: MobileWidgetType; icon: string; label: string }[] = [
-    { id: 'leaderboard', icon: '🏆', label: 'RACE' },
-    { id: 'telemetry', icon: '🏎️', label: 'TELEMETRY' },
-    { id: 'timing', icon: '⏱️', label: 'TIMING' },
-    { id: 'power', icon: '⚡', label: 'POWER' },
-    { id: 'aero', icon: '⚠️', label: 'AERO' },
-    { id: 'session', icon: '☁️', label: 'DATA' },
+    { id: 'hud', icon: '🏎️', label: 'HUD' },
+    { id: 'race', icon: '🏆', label: 'RACE' },
+    { id: 'car', icon: '🛠️', label: 'CAR' },
+    { id: 'data', icon: '📊', label: 'DATA' },
   ];
 
   return (

@@ -7,6 +7,8 @@ import { AdvancedTyresWidget } from './widgets/AdvancedTyresWidget';
 import { PowerUnitHealthWidget } from './widgets/PowerUnitHealthWidget';
 import { SuspensionWidget } from './widgets/SuspensionWidget';
 import { MobileBottomNav } from './widgets/MobileBottomNav';
+import { MobileHudWidget } from './widgets/MobileHudWidget';
+import { GForceRadar } from './widgets/GForceRadar';
 import type { MobileWidgetType } from './widgets/MobileBottomNav';
 
 export interface TelemetryData {
@@ -339,8 +341,27 @@ const TelemetryChart: React.FC<{
         <g transform={`translate(0, ${(chartHeight + chartSpacing) * 4 + padding})`}>
           <text x={padding} y={-10} fill="#888" fontSize="10" fontWeight="900" className="italic tracking-widest">GEAR</text>
           <rect x={padding} y={0} width={width-padding*2} height={chartHeight} fill="rgba(255,255,255,0.02)" rx="4" />
-          <path d={generatePath(secondaryPoints, p => p.gear / 8, 0)} fill="none" stroke="rgba(255,255,0,0.2)" strokeWidth="1.5" strokeDasharray="3,3" />
-          <path d={generatePath(primaryPoints, p => p.gear / 8, 0)} fill="none" stroke="#fff200" strokeWidth="2" />
+          
+          {/* Gear Grid Lines */}
+          {Array.from({ length: 7 }).map((_, i) => (
+            <line 
+              key={i}
+              x1={padding} 
+              y1={chartHeight - ((i + 1) / 8) * chartHeight} 
+              x2={width - padding} 
+              y2={chartHeight - ((i + 1) / 8) * chartHeight} 
+              stroke="white" 
+              strokeOpacity="0.05" 
+            />
+          ))}
+
+          <path d={generatePath(secondaryPoints, p => Math.max(0, p.gear) / 8, 0)} fill="none" stroke="rgba(255,255,0,0.2)" strokeWidth="1.5" strokeDasharray="3,3" />
+          <path d={generatePath(primaryPoints, p => Math.max(0, p.gear) / 8, 0)} fill="none" stroke="#fff200" strokeWidth="2" />
+          
+          {/* Y-Axis Labels */}
+          <text x={width - padding + 8} y={8} fill="#666" fontSize="9" fontWeight="black">8</text>
+          <text x={width - padding + 8} y={chartHeight/2 + 4} fill="#666" fontSize="9" fontWeight="black">4</text>
+          <text x={width - padding + 8} y={chartHeight} fill="#666" fontSize="9" fontWeight="black">N</text>
         </g>
 
         {/* ERS CHART */}
@@ -442,26 +463,6 @@ const RPMBar: React.FC<{ rpm: number; maxRpm: number }> = ({ rpm, maxRpm }) => {
   );
 };
 
-const GForceRadar: React.FC<{ lateral: number; longitudinal: number }> = ({ lateral, longitudinal }) => {
-  const size = 80;
-  const centerX = size / 2;
-  const centerY = size / 2;
-  const multiplier = 12; 
-  const dotX = centerX + (lateral * multiplier);
-  const dotY = centerY - (longitudinal * multiplier);
-
-  return (
-    <div className="flex justify-center items-center">
-      <svg width={size} height={size}>
-        <circle cx={centerX} cy={centerY} r="35" fill="none" stroke="#444" strokeWidth="1" />
-        <circle cx={centerX} cy={centerY} r="17.5" fill="none" stroke="#222" strokeWidth="1" />
-        <line x1="0" y1={centerY} x2={size} y2={centerY} stroke="#222" strokeWidth="1" />
-        <line x1={centerX} y1="0" x2={centerX} y2={size} stroke="#222" strokeWidth="1" />
-        <circle cx={dotX} cy={dotY} r="5" fill="#e10600" />
-      </svg>
-    </div>
-  );
-};
 
 const DistanceRow: React.FC<{ 
   label: string; 
@@ -641,7 +642,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'telemetry' | 'sectors' | 'engineering' | 'analysis'>('telemetry');
   const [selectedCarIndex, setSelectedCarIndex] = useState<number>(playerIndex);
   const [activeModalChart, setActiveModalChart] = useState<string | null>(null);
-  const [mobileActiveWidget, setMobileActiveWidget] = useState<MobileWidgetType>('telemetry');
+  const [mobileActiveWidget, setMobileActiveWidget] = useState<MobileWidgetType>('hud');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -751,7 +752,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const leaderboard = allLapData
     .map((ld, index) => ({ ld, index }))
-    .filter(item => item.ld !== null && item.index < 20)
+    .filter(item => item.ld !== null && (item.ld as any).m_carPosition > 0 && (item.ld as any).m_carPosition <= 22)
     .sort((a, b) => ((a.ld as any).m_carPosition ?? 99) - ((b.ld as any).m_carPosition ?? 99))
     .map((item, i, arr) => {
       const leaderTime = (arr[0].ld as any).m_currentLapTimeInMS;
@@ -840,11 +841,11 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
         
-        <div className="flex h-full gap-[5px] overflow-x-auto hide-scrollbar whitespace-nowrap lg:overflow-visible">
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'telemetry' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('telemetry')}>DASHBOARD</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'engineering' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('engineering')}>ENGINEERING</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'analysis' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('analysis')}>ANALYSIS</button>
-          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'sectors' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => setActiveTab('sectors')}>LAP HISTORY</button>
+        <div className="hidden lg:flex h-full gap-[5px] overflow-x-auto hide-scrollbar whitespace-nowrap lg:overflow-visible">
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'telemetry' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => { setActiveTab('telemetry'); setMobileActiveWidget('hud'); }}>DASHBOARD</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'engineering' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => { setActiveTab('engineering'); setMobileActiveWidget('car'); }}>ENGINEERING</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'analysis' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => { setActiveTab('analysis'); setMobileActiveWidget('data'); }}>ANALYSIS</button>
+          <button className={`bg-transparent border-none text-f1-gray px-5 font-black text-[0.75rem] uppercase tracking-wider cursor-pointer transition-all duration-300 flex items-center relative hover:text-white hover:bg-white/5 shrink-0 ${activeTab === 'sectors' ? 'text-white bg-white/5 after:content-[""] after:absolute after:bottom-0 after:left-0 after:w-full after:h-1 after:bg-f1-red' : ''}`} onClick={() => { setActiveTab('sectors'); setMobileActiveWidget('data'); }}>LAP HISTORY</button>
         </div>
 
         <div className={`px-[15px] py-1.5 rounded border font-black text-[0.7rem] flex items-center gap-2 tracking-wider transition-all duration-300 ${scStatus > 0 ? 'bg-f1-yellow/20 border-f1-yellow/50 text-f1-yellow shadow-[0_0_15px_rgba(255,242,0,0.2)]' : 'bg-white/5 border-white/10 text-white'}`}>
@@ -855,10 +856,9 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       <div className="w-full h-[3px] bg-[#111]"><div className="h-full bg-white shadow-[0_0_10px_white]" style={{ width: `${progressPct}%` }}></div></div>
 
-      {/* Main Content Grid with Mobile Toggle Logic */}
-      <div className="flex flex-wrap gap-[15px] p-[15px] pb-[80px] lg:pb-[15px]">
-        {/* LEADERBOARD WIDGET */}
-        <div className={`flex-[1_1_340px] ${mobileActiveWidget !== 'leaderboard' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
+      {/* --- CONTENT BLOCKS --- */}
+      {(() => {
+        const leaderboardContent = (
           <div className="f1-section leaderboard h-full">
             <h3 className="bg-f1-red/10 px-3 py-2 -mx-4 -mt-4 mb-3 border-b border-white/10 uppercase font-black text-[0.75rem] text-f1-gray">🏆 LIVE STANDINGS</h3>
             <div className="flex-1 overflow-y-auto -mx-[5px]">
@@ -886,280 +886,258 @@ const Dashboard: React.FC<DashboardProps> = ({
               </table>
             </div>
           </div>
-        </div>
+        );
 
-        {/* MAIN TABS AREA (Telemetry, Engineering, etc.) */}
-        <div className={`flex-[2_1_500px] order-[-1] lg:order-none ${mobileActiveWidget !== 'telemetry' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
-          {activeTab === 'telemetry' && (
-            <>
-              <div className="bg-[linear-gradient(180deg,#1a1a24_0%,#050508_100%)] rounded-[15px] p-6 mb-[15px] border border-[#333] flex flex-col items-center shadow-[0_20px_50px_rgba(0,0,0,0.9)] relative overflow-hidden">
-                {/* HUD Top Lights Decor */}
-                <div className="absolute top-0 w-1/2 h-1 bg-white/10 blur-sm"></div>
-                
-                <RPMBar rpm={(telemetry as any).m_engineRPM} maxRpm={(carStatus as any)?.m_maxRPM} />
-
-                <div className="w-full flex justify-between items-center mb-4 px-4">
-                  <div className="flex flex-col items-center justify-center">
-                    <span className="text-[0.6rem] text-f1-gray font-black tracking-[4px] mb-[-10px] uppercase">GEAR</span>
-                    <div className="text-[10rem] font-black text-white leading-none italic drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] filter contrast-125">
-                      {(() => { const g = (telemetry as any).m_gear; return g === 0 ? 'N' : g === -1 ? 'R' : g; })()}
-                    </div>
-                  </div>
-
-                  <div className="h-24 w-[2px] bg-white/5 mx-4"></div>
-
-                  <div className="text-right flex flex-col items-end justify-center">
-                    <span className="text-[0.6rem] text-f1-gray font-black tracking-[4px] mb-[-5px] uppercase">SPEED</span>
-                    <span className="text-[6rem] font-black leading-none tracking-tighter text-white">{(telemetry as any).m_speed}</span>
-                    <span className="text-[1.2rem] text-f1-red font-black mt-[-5px]">KM/H</span>
-                  </div>
-                </div>
-
-                <div className="w-full grid grid-cols-3 items-center">
-                  <div className="flex flex-col">
-                    <label className="text-[0.6rem] text-f1-gray font-black uppercase tracking-wider mb-1">THROTTLE</label>
-                    <div className="h-3.5 bg-black border border-[#333]"><div className="h-full bg-f1-green transition-[width] duration-100" style={{ width: `${(telemetry as any).m_throttle * 100}%` }}></div></div>
-                  </div>
-                  <div className="flex justify-center">
-                    <GForceRadar lateral={motionData?.m_carMotionData[playerIndex]?.m_gForceLateral || 0} longitudinal={motionData?.m_carMotionData[playerIndex]?.m_gForceLongitudinal || 0} />
-                  </div>
-                  <div className="flex flex-col">
-                    <label className="text-[0.6rem] text-f1-gray font-black uppercase tracking-wider mb-1 text-right">BRAKE</label>
-                    <div className="h-3.5 bg-black border border-[#333]"><div className="h-full bg-red-600 transition-[width] duration-100" style={{ width: `${(telemetry as any).m_brake * 100}%` }}></div></div>
-                  </div>
+        const desktopTelemetryHud = (
+          <div className="bg-[linear-gradient(180deg,#1a1a24_0%,#050508_100%)] rounded-[15px] p-6 mb-[15px] border border-[#333] flex flex-col items-center shadow-[0_20px_50px_rgba(0,0,0,0.9)] relative overflow-hidden">
+            <div className="absolute top-0 w-1/2 h-1 bg-white/10 blur-sm"></div>
+            <RPMBar rpm={(telemetry as any).m_engineRPM} maxRpm={(carStatus as any)?.m_maxRPM} />
+            <div className="w-full flex justify-between items-center mb-4 px-4">
+              <div className="flex flex-col items-center justify-center">
+                <span className="text-[0.6rem] text-f1-gray font-black tracking-[4px] mb-[-10px] uppercase">GEAR</span>
+                <div className="text-[10rem] font-black text-white leading-none italic drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] filter contrast-125">
+                  {(() => { const g = (telemetry as any).m_gear; return g === 0 ? 'N' : g === -1 ? 'R' : g; })()}
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-[15px]">
-                <div className="f1-section flex-1 min-w-[200px]">
-                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⏱️ DISTANCE TO CARS</h3>
-                  <DistanceWidget allLapData={allLapData} allParticipants={allParticipants} playerIndex={playerIndex} trackLength={sessionData?.m_trackLength || 0} />
-                </div>
-                <div className="f1-section flex-1 min-w-[200px]">
-                  <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🛞 TYRE CONDITION</h3>
-                  <TyreWidget telemetry={telemetry} carStatus={carStatus} carDamage={carDamage} />
-                </div>
+              <div className="h-24 w-[2px] bg-white/5 mx-4"></div>
+              <div className="text-right flex flex-col items-end justify-center">
+                <span className="text-[0.6rem] text-f1-gray font-black tracking-[4px] mb-[-5px] uppercase">SPEED</span>
+                <span className="text-[6rem] font-black leading-none tracking-tighter text-white">{(telemetry as any).m_speed}</span>
+                <span className="text-[1.2rem] text-f1-red font-black mt-[-5px]">KM/H</span>
               </div>
-            </>
-          )}
+            </div>
+            <div className="w-full grid grid-cols-3 items-center">
+              <div className="flex flex-col">
+                <label className="text-[0.6rem] text-f1-gray font-black uppercase tracking-wider mb-1">THROTTLE</label>
+                <div className="h-3.5 bg-black border border-[#333]"><div className="h-full bg-f1-green transition-[width] duration-100" style={{ width: `${(telemetry as any).m_throttle * 100}%` }}></div></div>
+              </div>
+              <div className="flex justify-center">
+                <GForceRadar lateral={motionData?.m_carMotionData[playerIndex]?.m_gForceLateral || 0} longitudinal={motionData?.m_carMotionData[playerIndex]?.m_gForceLongitudinal || 0} />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[0.6rem] text-f1-gray font-black uppercase tracking-wider mb-1 text-right">BRAKE</label>
+                <div className="h-3.5 bg-black border border-[#333]"><div className="h-full bg-red-600 transition-[width] duration-100" style={{ width: `${(telemetry as any).m_brake * 100}%` }}></div></div>
+              </div>
+            </div>
+          </div>
+        );
 
-          {activeTab === 'engineering' && (
-            <div className="flex flex-col gap-[15px]">
-              <div className="flex flex-wrap gap-[15px]">
-                {/* ADVANCED TYRES */}
-                <div className="flex-[1_1_300px]">
-                  <AdvancedTyresWidget telemetry={telemetry} />
-                </div>
-                
-                {/* BRAKE TEMPERATURES */}
-                <div className="flex-[1_1_300px] f1-section h-full flex flex-col">
-                  <h3 className="mt-0 mb-4 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">
-                    🏎️ BRAKE TEMPERATURES
-                  </h3>
-                  <div className="flex-1 grid grid-cols-2 gap-5 max-w-[300px] mx-auto w-full content-center">
-                    {[2, 3, 0, 1].map((i) => {
-                      const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
-                      const labels = ['RL', 'RR', 'FL', 'FR'];
-                      return (
-                        <div key={i} className="bg-white/[0.03] p-3 rounded flex flex-col items-center border border-[#222]">
-                          <label className="text-[0.6rem] text-f1-gray font-black mb-2 uppercase tracking-wider">{labels[i]}</label>
-                          <div className="w-2 h-16 bg-black rounded-full overflow-hidden relative mb-2">
-                            <div 
-                              className="absolute bottom-0 w-full transition-[height,background-color] duration-300" 
-                              style={{ 
-                                height: `${Math.min((temp / 1000) * 100, 100)}%`, 
-                                backgroundColor: temp > 850 ? '#ff0000' : temp > 400 ? '#00ff00' : '#00ffff' 
-                              }}
-                            ></div>
-                          </div>
-                          <span className="text-[0.8rem] font-black font-mono" style={{ color: temp > 850 ? 'red' : temp > 400 ? '#00ff00' : '#00ffff' }}>{temp}°C</span>
+        const distanceContent = (
+          <div className="f1-section flex-1 min-w-[200px]">
+            <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">⏱️ DISTANCE TO CARS</h3>
+            <DistanceWidget allLapData={allLapData} allParticipants={allParticipants} playerIndex={playerIndex} trackLength={sessionData?.m_trackLength || 0} />
+          </div>
+        );
+
+        const tyreConditionContent = (
+          <div className="f1-section flex-1 min-w-[200px]">
+            <h3 className="mt-0 mb-3 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🛞 TYRE CONDITION</h3>
+            <TyreWidget telemetry={telemetry} carStatus={carStatus} carDamage={carDamage} />
+          </div>
+        );
+
+        const engineeringContent = (
+          <div className="flex flex-col gap-[15px]">
+            <div className="flex flex-wrap gap-[15px]">
+              <div className="flex-[1_1_300px]">
+                <AdvancedTyresWidget telemetry={telemetry} />
+              </div>
+              <div className="flex-[1_1_300px] f1-section h-full flex flex-col">
+                <h3 className="mt-0 mb-4 text-[0.75rem] font-black text-f1-gray border-b border-white/5 pb-1 uppercase">🏎️ BRAKE TEMPERATURES</h3>
+                <div className="flex-1 grid grid-cols-2 gap-5 max-w-[300px] mx-auto w-full content-center">
+                  {[2, 3, 0, 1].map((i) => {
+                    const temp = (telemetry as any).m_brakesTemperature?.[i] || 0;
+                    const labels = ['RL', 'RR', 'FL', 'FR'];
+                    return (
+                      <div key={i} className="bg-white/[0.03] p-3 rounded flex flex-col items-center border border-[#222]">
+                        <label className="text-[0.6rem] text-f1-gray font-black mb-2 uppercase tracking-wider">{labels[i]}</label>
+                        <div className="w-2 h-16 bg-black rounded-full overflow-hidden relative mb-2">
+                          <div className="absolute bottom-0 w-full transition-[height,background-color] duration-300" style={{ height: `${Math.min((temp / 1000) * 100, 100)}%`, backgroundColor: temp > 850 ? '#ff0000' : temp > 400 ? '#00ff00' : '#00ffff' }}></div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-[15px]">
-                {/* POWER UNIT HEALTH */}
-                <div className="flex-[1_1_300px]">
-                  <PowerUnitHealthWidget carDamage={carDamage} />
-                </div>
-
-                {/* SUSPENSION & CORE ENGINE */}
-                <div className="flex-[1_1_300px] flex flex-col gap-[15px]">
-                  <div className="h-[200px]">
-                    <SuspensionWidget telemetry={telemetry} />
-                  </div>
-                  
-                  <div className="text-center p-4 bg-[radial-gradient(circle,#1a1a24_0%,#050508_100%)] rounded-[15px] border border-[#333] relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-full before:h-1 before:bg-[linear-gradient(90deg,transparent,#e10600,transparent)]">
-                    <label className="text-[0.6rem] text-[#666] font-black tracking-[2px] uppercase">CORE ENGINE THERMALS</label>
-                    <div className="text-[3.5rem] font-black leading-none shadow-[0_0_30px_rgba(255,255,255,0.1)] mt-1" style={{ color: (telemetry as any).m_engineTemperature > 125 ? '#e10600' : 'white' }}>
-                      {(telemetry as any).m_engineTemperature}°C
-                    </div>
-                    <div className="text-[0.6rem] mt-1 font-black uppercase" style={{ color: (telemetry as any).m_engineTemperature > 110 ? '#ffb800' : '#666' }}>
-                      {(telemetry as any).m_engineTemperature > 125 ? '⚠️ OVERHEATING' : (telemetry as any).m_engineTemperature > 110 ? '📈 HIGH TEMPERATURE' : '🟢 OPERATING NOMINAL'}
-                    </div>
-                  </div>
+                        <span className="text-[0.8rem] font-black font-mono" style={{ color: temp > 850 ? 'red' : temp > 400 ? '#00ff00' : '#00ffff' }}>{temp}°C</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-          )}
-
-          {activeTab === 'analysis' && (
-            <div className="f1-section flex-1 min-w-[800px]">
-              <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-                <div className="flex items-center gap-6">
-                  <div>
-                    <h3 className="m-0 text-[0.85rem] font-black text-white uppercase tracking-wider">📊 PERFORMANCE ANALYSIS</h3>
-                    <div className="text-f1-gray text-[0.65rem] font-black mt-1 uppercase opacity-60">Real-time telemetry comparison and delta tracking</div>
-                  </div>
-                  
-                  <div className="flex bg-black/60 p-1 rounded-md border border-white/10">
-                    <button 
-                      className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'live' ? 'bg-f1-red text-white' : 'text-f1-gray hover:text-white'}`}
-                      onClick={() => setPrimaryDataSource('live')}
-                    >
-                      LIVE TELEMETRY
-                    </button>
-                    <button 
-                      className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'best' ? 'bg-f1-purple text-white' : 'text-f1-gray hover:text-white'}`}
-                      onClick={() => setPrimaryDataSource('best')}
-                    >
-                      YOUR BEST LAP
-                    </button>
-                  </div>
+            <div className="flex flex-wrap gap-[15px]">
+              <div className="flex-[1_1_300px]">
+                <PowerUnitHealthWidget carDamage={carDamage} />
+              </div>
+              <div className="flex-[1_1_300px] flex flex-col gap-[15px]">
+                <div className="h-[200px]">
+                  <SuspensionWidget telemetry={telemetry} />
                 </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
-                    <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
-                    <select 
-                      className="bg-[#050508] border border-white/20 text-white text-[0.7rem] px-3 py-1.5 rounded font-black uppercase outline-none focus:border-f1-red transition-all cursor-pointer hover:bg-black"
-                      value={comparisonCarIndex ?? ""}
-                      onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}
-                    >
-                      {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
-                      {allParticipants.map((p, i) => {
-                        if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
-                        const hasData = bestLapsTelemetry[i]?.length > 0;
-                        return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
-                      })}
-                    </select>
-                  </div>
+                <div className="text-center p-4 bg-[radial-gradient(circle,#1a1a24_0%,#050508_100%)] rounded-[15px] border border-[#333] relative overflow-hidden before:content-[''] before:absolute before:top-0 before:left-0 before:w-full before:h-1 before:bg-[linear-gradient(90deg,transparent,#e10600,transparent)]">
+                  <label className="text-[0.6rem] text-[#666] font-black tracking-[2px] uppercase">CORE ENGINE THERMALS</label>
+                  <div className="text-[3.5rem] font-black leading-none shadow-[0_0_30px_rgba(255,255,255,0.1)] mt-1" style={{ color: (telemetry as any).m_engineTemperature > 125 ? '#e10600' : 'white' }}>{(telemetry as any).m_engineTemperature}°C</div>
+                  <div className="text-[0.6rem] mt-1 font-black uppercase" style={{ color: (telemetry as any).m_engineTemperature > 110 ? '#ffb800' : '#666' }}>{(telemetry as any).m_engineTemperature > 125 ? '⚠️ OVERHEATING' : (telemetry as any).m_engineTemperature > 110 ? '📈 HIGH TEMPERATURE' : '🟢 OPERATING NOMINAL'}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        );
 
+        const analysisContent = (
+          <div className="f1-section flex-1 min-w-[800px] lg:min-w-0">
+            <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2 flex-wrap gap-4">
+              <div className="flex items-center gap-6">
+                <div>
+                  <h3 className="m-0 text-[0.85rem] font-black text-white uppercase tracking-wider">📊 PERFORMANCE ANALYSIS</h3>
+                  <div className="text-f1-gray text-[0.65rem] font-black mt-1 uppercase opacity-60">Real-time telemetry comparison and delta tracking</div>
+                </div>
+                <div className="flex bg-black/60 p-1 rounded-md border border-white/10">
+                  <button className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'live' ? 'bg-f1-red text-white' : 'text-f1-gray hover:text-white'}`} onClick={() => setPrimaryDataSource('live')}>LIVE TELEMETRY</button>
+                  <button className={`px-3 py-1.5 text-[0.65rem] font-black uppercase tracking-wider rounded transition-all ${primaryDataSource === 'best' ? 'bg-f1-purple text-white' : 'text-f1-gray hover:text-white'}`} onClick={() => setPrimaryDataSource('best')}>YOUR BEST LAP</button>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 bg-black/40 p-2 rounded-md border border-white/5">
+                  <label className="text-[0.6rem] font-black text-f1-gray uppercase tracking-widest">COMPARE VS:</label>
+                  <select className="bg-[#050508] border border-white/20 text-white text-[0.7rem] px-3 py-1.5 rounded font-black uppercase outline-none focus:border-f1-red transition-all cursor-pointer hover:bg-black" value={comparisonCarIndex ?? ""} onChange={(e) => setComparisonCarIndex(e.target.value === "" ? null : parseInt(e.target.value))}>
+                    {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
+                    {allParticipants.map((p, i) => {
+                      if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
+                      const hasData = bestLapsTelemetry[i]?.length > 0;
+                      return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
+                    })}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <TelemetryChart 
+              primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+              secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+              trackLength={sessionData?.m_trackLength || 5000} 
+              primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
+              secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
+              onExpand={() => setActiveModalChart("TELEMETRY COMPARISON")}
+            />
+
+            <ChartModal isOpen={!!activeModalChart} onClose={() => setActiveModalChart(null)} title={activeModalChart || ""}>
               <TelemetryChart 
                 primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 trackLength={sessionData?.m_trackLength || 5000} 
                 primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
                 secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
-                onExpand={() => setActiveModalChart("TELEMETRY COMPARISON")}
+                isExpanded={true}
               />
+            </ChartModal>
 
-              <ChartModal 
-                isOpen={!!activeModalChart} 
-                onClose={() => setActiveModalChart(null)} 
-                title={activeModalChart || ""}
-              >
-                <TelemetryChart 
-                  primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
-                  secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
-                  trackLength={sessionData?.m_trackLength || 5000} 
-                  primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
-                  secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
-                  isExpanded={true}
-                />
-              </ChartModal>
-
-              <div className="mt-5 grid grid-cols-4 gap-4">
-                {[
-                  { label: 'AVG THROTTLE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.throttle, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#00ff00' },
-                  { label: 'AVG BRAKE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.brake, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#ff0000' },
-                  { label: 'MAX SPEED', value: Math.max(0, ...(primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
-                  { label: 'EST. DELTA', value: (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? 
-                    (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) < Math.abs(prev.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
-                ].map((stat, i) => (
-                  <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02]" style={{ borderBottomColor: stat.color }}>
-                    <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[1.4rem] font-black" style={{ color: stat.isDelta ? (stat.value > 0 ? '#ff0000' : '#00ff00') : 'white' }}>
-                        {stat.isDelta && stat.value > 0 ? '+' : ''}{stat.value.toFixed(stat.isDelta ? 3 : 1)}
-                      </span>
-                      <span className="text-[0.65rem] font-black text-[#444]">{stat.unit}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'sectors' && (
-            <div className="f1-section flex-1">
-              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
-                <h3 className="m-0 text-[0.75rem] font-black text-f1-gray uppercase">⏱️ DETAILED LAP HISTORY - {(allParticipants[selectedCarIndex] as any)?.m_name}</h3>
-                <div className="flex gap-4">
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-f1-purple shadow-[0_0_8px_#b131ff]"></div>
-                    <span className="text-[0.6rem] font-black text-f1-purple uppercase tracking-widest">Session Best</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-f1-green shadow-[0_0_8px_#00ff00]"></div>
-                    <span className="text-[0.6rem] font-black text-f1-green uppercase tracking-widest">Personal Best</span>
+            <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'AVG THROTTLE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.throttle, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#00ff00' },
+                { label: 'AVG BRAKE', value: (primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).reduce((acc, p) => acc + p.brake, 0) / ((primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).length || 1) * 100, unit: '%', color: '#ff0000' },
+                { label: 'MAX SPEED', value: Math.max(0, ...(primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])).map(p => p.speed)), unit: 'KM/H', color: '#ffffff' },
+                { label: 'EST. DELTA', value: (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])?.length > 0 && (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex])?.length > 0) ? (((primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].time - (comparisonCarIndex !== null ? bestLapsTelemetry[comparisonCarIndex] : bestLapsTelemetry[playerIndex]).reduce((prev, curr) => Math.abs(curr.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) < Math.abs(prev.distance - (primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex])[(primaryDataSource === 'live' ? currentLapsTelemetry[playerIndex] : bestLapsTelemetry[playerIndex]).length - 1].distance) ? curr : prev).time) / 1000) : 0), unit: 's', color: '#b131ff', isDelta: true }
+              ].map((stat, i) => (
+                <div key={i} className="bg-[#050508] p-4 rounded-lg border-b-4 transition-transform hover:scale-[1.02]" style={{ borderBottomColor: stat.color }}>
+                  <label className="text-[0.6rem] text-[#666] block uppercase font-black tracking-widest mb-1">{stat.label}</label>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[1.4rem] font-black" style={{ color: stat.isDelta ? (stat.value > 0 ? '#ff0000' : '#00ff00') : 'white' }}>{stat.isDelta && stat.value > 0 ? '+' : ''}{stat.value.toFixed(stat.isDelta ? 3 : 1)}</span>
+                    <span className="text-[0.65rem] font-black text-[#444]">{stat.unit}</span>
                   </div>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead><tr className="text-f1-gray text-[0.7rem] uppercase font-black text-left border-b border-white/5"><th className="p-2.5">LAP</th><th className="p-2.5">SECTOR 1</th><th className="p-2.5">SECTOR 2</th><th className="p-2.5">SECTOR 3</th><th className="p-2.5">LAP TIME</th></tr></thead>
-                  <tbody>
-                    {lapsList.map((lap, i) => (
-                      <tr key={i} className={`border-b border-white/[0.03] ${(lap as any).m_lapValidBitFlags & 0x01 ? '' : 'opacity-40 grayscale'}`}>
-                        <td className="p-2.5 font-black text-f1-gray">#{history.m_numLaps - i}</td>
-                        <td className={`p-2.5 ${getTimeColor((lap as any).m_sector1TimeInMS, personalBests.s1, sessionBests.s1)}`}>{formatTime((lap as any).m_sector1TimeInMS)}</td>
-                        <td className={`p-2.5 ${getTimeColor((lap as any).m_sector2TimeInMS, personalBests.s2, sessionBests.s2)}`}>{formatTime((lap as any).m_sector2TimeInMS)}</td>
-                        <td className={`p-2.5 ${getTimeColor((lap as any).m_sector3TimeInMS, personalBests.s3, sessionBests.s3)}`}>{formatTime((lap as any).m_sector3TimeInMS)}</td>
-                        <td className={`p-2.5 font-black ${getTimeColor((lap as any).m_lapTimeInMS, personalBests.lap, sessionBests.lap)}`}>{formatTime((lap as any).m_lapTimeInMS)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              ))}
+            </div>
+          </div>
+        );
+
+        const lapHistoryContent = (
+          <div className="f1-section flex-1">
+            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 mb-4 border-b border-white/5 pb-2">
+              <h3 className="m-0 text-[0.75rem] font-black text-f1-gray uppercase">⏱️ DETAILED LAP HISTORY - {(allParticipants[selectedCarIndex] as any)?.m_name}</h3>
+              <div className="flex gap-4">
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-f1-purple shadow-[0_0_8px_#b131ff]"></div><span className="text-[0.6rem] font-black text-f1-purple uppercase tracking-widest">Session Best</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-f1-green shadow-[0_0_8px_#00ff00]"></div><span className="text-[0.6rem] font-black text-f1-green uppercase tracking-widest">Personal Best</span></div>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* SIDE WIDGETS COLUMN */}
-        <div className="flex-[1_1_340px] flex flex-col gap-[15px]">
-          {/* LIVE TIMING WIDGET */}
-          <div className={`${mobileActiveWidget !== 'timing' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
-            <LiveTimingWidget 
-              lapData={lapData as any} 
-              personalBestLap={personalBests.lap} 
-              sessionBestLap={sessionBests.lap} 
-              getTimeColor={getTimeColor} 
-              formatTime={formatTime} 
-            />
+            <div className="overflow-x-auto w-full">
+              <table className="w-full border-collapse">
+                <thead><tr className="text-f1-gray text-[0.7rem] uppercase font-black text-left border-b border-white/5"><th className="p-2.5 whitespace-nowrap">LAP</th><th className="p-2.5 whitespace-nowrap">SECTOR 1</th><th className="p-2.5 whitespace-nowrap">SECTOR 2</th><th className="p-2.5 whitespace-nowrap">SECTOR 3</th><th className="p-2.5 whitespace-nowrap">LAP TIME</th></tr></thead>
+                <tbody>
+                  {lapsList.map((lap, i) => (
+                    <tr key={i} className={`border-b border-white/[0.03] ${(lap as any).m_lapValidBitFlags & 0x01 ? '' : 'opacity-40 grayscale'}`}>
+                      <td className="p-2.5 font-black text-f1-gray">#{history.m_numLaps - i}</td>
+                      <td className={`p-2.5 ${getTimeColor((lap as any).m_sector1TimeInMS, personalBests.s1, sessionBests.s1)}`}>{formatTime((lap as any).m_sector1TimeInMS)}</td>
+                      <td className={`p-2.5 ${getTimeColor((lap as any).m_sector2TimeInMS, personalBests.s2, sessionBests.s2)}`}>{formatTime((lap as any).m_sector2TimeInMS)}</td>
+                      <td className={`p-2.5 ${getTimeColor((lap as any).m_sector3TimeInMS, personalBests.s3, sessionBests.s3)}`}>{formatTime((lap as any).m_sector3TimeInMS)}</td>
+                      <td className={`p-2.5 font-black ${getTimeColor((lap as any).m_lapTimeInMS, personalBests.lap, sessionBests.lap)}`}>{formatTime((lap as any).m_lapTimeInMS)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
+        );
 
-          {/* POWER & TIRES WIDGET */}
-          <div className={`${mobileActiveWidget !== 'power' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
-            <PowerTiresWidget carStatus={carStatus} />
-          </div>
+        const liveTimingContent = <LiveTimingWidget lapData={lapData as any} personalBestLap={personalBests.lap} sessionBestLap={sessionBests.lap} getTimeColor={getTimeColor} formatTime={formatTime} />;
+        const powerTiresContent = <PowerTiresWidget carStatus={carStatus} />;
+        const aeroDamageContent = <AeroDamageWidget carDamage={carDamage} />;
+        const sessionDataContent = <SessionDataWidget sessionData={sessionData} />;
 
-          {/* AERO DAMAGE WIDGET */}
-          <div className={`${mobileActiveWidget !== 'aero' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
-            <AeroDamageWidget carDamage={carDamage} />
-          </div>
+        return (
+          <>
+            {/* --- DESKTOP LAYOUT --- */}
+            <div className="hidden lg:flex flex-wrap gap-[15px] p-[15px] pb-[15px]">
+              <div className="flex-[1_1_340px]">{leaderboardContent}</div>
+              <div className="flex-[2_1_500px] order-[-1] lg:order-none">
+                {activeTab === 'telemetry' && (
+                  <>
+                    {desktopTelemetryHud}
+                    <div className="flex flex-wrap gap-[15px]">
+                      {distanceContent}
+                      {tyreConditionContent}
+                    </div>
+                  </>
+                )}
+                {activeTab === 'engineering' && engineeringContent}
+                {activeTab === 'analysis' && analysisContent}
+                {activeTab === 'sectors' && lapHistoryContent}
+              </div>
+              <div className="flex-[1_1_340px] flex flex-col gap-[15px]">
+                {liveTimingContent}
+                {powerTiresContent}
+                {aeroDamageContent}
+                {sessionDataContent}
+              </div>
+            </div>
 
-          {/* SESSION DATA WIDGET */}
-          <div className={`${mobileActiveWidget !== 'session' ? 'hidden lg:block' : 'w-full min-h-[calc(100vh-160px)]'}`}>
-            <SessionDataWidget sessionData={sessionData} />
-          </div>
-        </div>
-      </div>
+            {/* --- MOBILE LAYOUT --- */}
+            <div className="lg:hidden flex flex-col gap-[15px] p-[15px] pb-[80px] w-full min-h-[calc(100vh-160px)]">
+              {mobileActiveWidget === 'hud' && (
+                <MobileHudWidget telemetry={telemetry} carStatus={carStatus} motionData={motionData} playerIndex={playerIndex} />
+              )}
+              {mobileActiveWidget === 'race' && (
+                <>
+                  <div className="w-full h-[350px] overflow-hidden">{leaderboardContent}</div>
+                  {liveTimingContent}
+                </>
+              )}
+              {mobileActiveWidget === 'car' && (
+                <>
+                  {tyreConditionContent}
+                  {powerTiresContent}
+                  {engineeringContent}
+                  {aeroDamageContent}
+                </>
+              )}
+              {mobileActiveWidget === 'data' && (
+                <>
+                  {sessionDataContent}
+                  {lapHistoryContent}
+                  <div className="w-full overflow-x-auto">
+                    {analysisContent}
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       <MobileBottomNav 
         activeWidget={mobileActiveWidget} 
