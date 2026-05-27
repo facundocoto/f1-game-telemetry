@@ -155,15 +155,27 @@ function App() {
         session: {
           track: sessionData?.m_trackId,
           sessionType: sessionData?.m_sessionType,
-          weather: sessionData?.m_weather,
+          weather: sessionData?.m_weather,               // 0=Clear 1=LightCloud 2=Overcast 3=LightRain 4=HeavyRain 5=Storm
           trackTemperature: sessionData?.m_trackTemperature,
           airTemperature: sessionData?.m_airTemperature,
           totalLaps: sessionData?.m_totalLaps,
           trackLength: sessionData?.m_trackLength,
-          safetyCarStatus: sessionData?.m_safetyCarStatus,
+          safetyCarStatus: sessionData?.m_safetyCarStatus, // 0=None 1=Full 2=Virtual 3=FormationLap
+          pitSpeedLimit: sessionData?.m_pitSpeedLimit,
+          gamePaused: sessionData?.m_gamePaused,
+          weatherForecast: sessionData?.m_weatherForecastSamples
+            ? sessionData.m_weatherForecastSamples.slice(0, 5).map((s: any) => ({
+                timeOffset_min: s.m_timeOffset,
+                weather: s.m_weather,
+                trackTemp: s.m_trackTemperature,
+                rainProbability_pct: s.m_rainPercentage,
+              }))
+            : null,
         },
         driver: {
           name: participant?.m_name,
+          teamId: participant?.m_teamId,
+          raceNumber: participant?.m_raceNumber,
           position: lapData?.m_carPosition,
           currentLap: lapData?.m_currentLapNum,
           lastLapTimeMs: lapData?.m_lastLapTimeInMS,
@@ -171,6 +183,9 @@ function App() {
           sector1Ms: lapData?.m_sector1TimeInMS,
           sector2Ms: lapData?.m_sector2TimeInMS,
           lapDistance: lapData?.m_lapDistance,
+          pitStatus: (lapData as any)?.m_pitStatus,       // 0=None 1=Pitting 2=InPitArea
+          penalties_sec: (lapData as any)?.m_penalties,
+          warnings: (lapData as any)?.m_numUnservedDriveThroughPens,
         },
         car: {
           speedKmh: telemetry?.m_speed,
@@ -179,16 +194,14 @@ function App() {
           gear: telemetry?.m_gear,
           engineRPM: telemetry?.m_engineRPM,
           engineTemperature: telemetry?.m_engineTemperature,
-          tyresSurfaceTemp: telemetry?.m_tyresSurfaceTemperature,
-          tyresInnerTemp: telemetry?.m_tyresInnerTemperature,
-          tyresPressure: telemetry?.m_tyresPressure,
+          drs: (telemetry as any)?.m_drs,                 // 0=Off 1=On
           brakesTemperature: telemetry?.m_brakesTemperature,
         },
         tyres: {
-          visualCompound: carStatus?.m_visualTyreCompound,  // 16=Soft 17=Medium 18=Hard 19=Inter 20=Wet
+          visualCompound: carStatus?.m_visualTyreCompound, // 16=Soft 17=Medium 18=Hard 19=Inter 20=Wet
           actualCompound: carStatus?.m_actualTyreCompound,
           tyreAgeLaps: carStatus?.m_tyresAgeLaps,
-          wear_pct: carDamage?.m_tyresWear,  // [RL, RR, FL, FR] %
+          wear_pct: carDamage?.m_tyresWear,               // [RL, RR, FL, FR] %
           surfaceTemp: telemetry?.m_tyresSurfaceTemperature,
           innerTemp: telemetry?.m_tyresInnerTemperature,
           pressure: telemetry?.m_tyresPressure,
@@ -198,8 +211,11 @@ function App() {
           remainingLaps_gameEstimate: carStatus?.m_fuelRemainingLaps,
         },
         ers: {
-          storeEnergy_joules: carStatus?.m_ersStoreEnergy,  // max 4,000,000 J
-          deployMode: carStatus?.m_ersDeployMode,
+          storeEnergy_joules: carStatus?.m_ersStoreEnergy, // max 4,000,000 J
+          deployMode: carStatus?.m_ersDeployMode,          // 0=None 1=Low 2=Medium 3=High 4=Overtake
+          harvestedThisLap_MGUKJoules: (carStatus as any)?.m_ersHarvestedThisLapMGUK,
+          harvestedThisLap_MGUHJoules: (carStatus as any)?.m_ersHarvestedThisLapMGUH,
+          deployedThisLap_joules: (carStatus as any)?.m_ersDeployedThisLap,
         },
         damage: {
           frontLeftWing: carDamage?.m_frontLeftWingDamage,
@@ -217,13 +233,12 @@ function App() {
         lapHistory: (() => {
           const history = sessionHistory[playerIndex];
           if (!history) return null;
-          const laps = history.m_lapHistoryData.slice(0, history.m_numLaps);
-          return laps.map((lap, i) => ({
+          return history.m_lapHistoryData.slice(0, history.m_numLaps).map((lap, i) => ({
             lap: i + 1,
             lapTime_ms: lap.m_lapTimeInMS,
-            sector1_ms: lap.m_sector1TimeInMS,
-            sector2_ms: lap.m_sector2TimeInMS,
-            sector3_ms: lap.m_sector3TimeInMS,
+            s1_ms: lap.m_sector1TimeInMS,
+            s2_ms: lap.m_sector2TimeInMS,
+            s3_ms: lap.m_sector3TimeInMS,
             valid: !!(lap.m_lapValidBitFlags & 0x01),
           }));
         })(),
@@ -234,7 +249,36 @@ function App() {
             ? sessionData.m_totalLaps - lapData.m_currentLapNum
             : null,
           position: lapData?.m_carPosition,
+          totalCars: allLapData.filter(ld => ld && (ld as any).m_carPosition > 0).length,
         },
+        // All cars on track — critical for pit strategy, gap management, undercut/overcut
+        opponents: allLapData
+          .map((ld, idx) => {
+            if (!ld || idx === playerIndex) return null;
+            const pos = (ld as any).m_carPosition;
+            if (!pos || pos <= 0 || pos > 22) return null;
+            const st = allCarStatus[idx];
+            const p = allParticipants[idx];
+            return {
+              name: (p as any)?.m_name ?? `CAR ${idx}`,
+              position: pos,
+              currentLap: (ld as any).m_currentLapNum,
+              lastLapTime_ms: (ld as any).m_lastLapTimeInMS,
+              tyreCompound: (st as any)?.m_visualTyreCompound, // 16=S 17=M 18=H 19=I 20=W
+              tyreAgeLaps: (st as any)?.m_tyresAgeLaps,
+              gapToPlayerMeters: (() => {
+                const playerLd = allLapData[playerIndex];
+                if (!playerLd) return null;
+                const trackLen = sessionData?.m_trackLength || 1;
+                const playerDist = ((playerLd as any).m_currentLapNum - 1) * trackLen + (playerLd as any).m_lapDistance;
+                const opDist = ((ld as any).m_currentLapNum - 1) * trackLen + (ld as any).m_lapDistance;
+                return Math.round(playerDist - opDist);
+              })(),
+              pitStatus: (ld as any)?.m_pitStatus,
+            };
+          })
+          .filter(Boolean)
+          .sort((a: any, b: any) => a.position - b.position),
       }} />
     </div>
   );

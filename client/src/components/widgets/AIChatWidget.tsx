@@ -272,12 +272,14 @@ export default function AIChatWidget({ telemetryContext }: AIChatWidgetProps) {
     if (!open) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || e.repeat || listeningRef.current || loadingRef.current) return;
-      if (isInputFocused.current) {
-        // Blur the input so Space becomes PTT, not a typed character
+      // Escape: blur the input to return to voice mode
+      if (e.code === 'Escape' && isInputFocused.current) {
         inputRef.current?.blur();
         isInputFocused.current = false;
+        return;
       }
+      // Space: PTT only when the text input is NOT focused
+      if (e.code !== 'Space' || e.repeat || isInputFocused.current || listeningRef.current || loadingRef.current) return;
       e.preventDefault();
       startListeningRef.current();
     };
@@ -536,7 +538,9 @@ export default function AIChatWidget({ telemetryContext }: AIChatWidgetProps) {
             <div className="px-3 pb-1.5 text-[10px] text-gray-700 font-black uppercase tracking-widest select-none">
               {listening
                 ? (language === 'es' ? '🔴 Escuchando… suelta Espacio o pulsa 🎤 para enviar' : '🔴 Listening… release Space or click 🎤 to send')
-                : (language === 'es' ? 'Mantén Espacio para hablar · Enter para enviar' : 'Hold Space to talk · Enter to send')}
+                : isInputFocused.current
+                  ? (language === 'es' ? 'Escribe · Enter para enviar · Esc para volver a voz' : 'Type · Enter to send · Esc to return to voice')
+                  : (language === 'es' ? 'Mantén Espacio para hablar · Clic para escribir' : 'Hold Space to talk · Click to type')}
             </div>
           </div>
         </div>
