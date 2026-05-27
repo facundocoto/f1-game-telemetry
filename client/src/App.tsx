@@ -10,6 +10,36 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [playerIndex, setPlayerIndex] = useState<number>(0);
 
+  // Keep the screen awake while the dashboard is open (Screen Wake Lock API)
+  useEffect(() => {
+    let wakeLock: { release: () => Promise<void> } | null = null;
+
+    const acquire = async () => {
+      try {
+        const nav = navigator as Navigator & {
+          wakeLock?: { request: (type: string) => Promise<{ release: () => Promise<void> }> }
+        };
+        if (!nav.wakeLock) return;
+        wakeLock = await nav.wakeLock.request('screen');
+      } catch {
+        // Wake lock not granted (e.g. battery saver mode) — fail silently
+      }
+    };
+
+    acquire();
+
+    // Re-acquire after the tab becomes visible again (browser releases it on tab hide)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') acquire();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      wakeLock?.release();
+    };
+  }, []);
+
   // Player specific data
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [allTelemetry, setAllTelemetry] = useState<(TelemetryData | null)[]>(new Array(22).fill(null));
