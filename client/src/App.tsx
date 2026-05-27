@@ -188,11 +188,18 @@ function App() {
           visualCompound: carStatus?.m_visualTyreCompound,  // 16=Soft 17=Medium 18=Hard 19=Inter 20=Wet
           actualCompound: carStatus?.m_actualTyreCompound,
           tyreAgeLaps: carStatus?.m_tyresAgeLaps,
-          wear: carDamage?.m_tyresWear,  // [RL, RR, FL, FR] %
-          fuelRemainingLaps: carStatus?.m_fuelRemainingLaps,
-          fuelInTank: carStatus?.m_fuelInTank,
-          ersStoreEnergy: carStatus?.m_ersStoreEnergy,
-          ersDeployMode: carStatus?.m_ersDeployMode,
+          wear_pct: carDamage?.m_tyresWear,  // [RL, RR, FL, FR] %
+          surfaceTemp: telemetry?.m_tyresSurfaceTemperature,
+          innerTemp: telemetry?.m_tyresInnerTemperature,
+          pressure: telemetry?.m_tyresPressure,
+        },
+        fuel: {
+          inTank_kg: carStatus?.m_fuelInTank,
+          remainingLaps_gameEstimate: carStatus?.m_fuelRemainingLaps,
+        },
+        ers: {
+          storeEnergy_joules: carStatus?.m_ersStoreEnergy,  // max 4,000,000 J
+          deployMode: carStatus?.m_ersDeployMode,
         },
         damage: {
           frontLeftWing: carDamage?.m_frontLeftWingDamage,
@@ -207,10 +214,27 @@ function App() {
           engineCE: carDamage?.m_engineCEWear,
           engineTC: carDamage?.m_engineTCWear,
         },
-        gForces: {
-          lateral: motionData?.m_carMotionData[playerIndex]?.m_gForceLateral,
-          longitudinal: motionData?.m_carMotionData[playerIndex]?.m_gForceLongitudinal,
-        }
+        lapHistory: (() => {
+          const history = sessionHistory[playerIndex];
+          if (!history) return null;
+          const laps = history.m_lapHistoryData.slice(0, history.m_numLaps);
+          return laps.map((lap, i) => ({
+            lap: i + 1,
+            lapTime_ms: lap.m_lapTimeInMS,
+            sector1_ms: lap.m_sector1TimeInMS,
+            sector2_ms: lap.m_sector2TimeInMS,
+            sector3_ms: lap.m_sector3TimeInMS,
+            valid: !!(lap.m_lapValidBitFlags & 0x01),
+          }));
+        })(),
+        raceProgress: {
+          currentLap: lapData?.m_currentLapNum,
+          totalLaps: sessionData?.m_totalLaps,
+          lapsRemaining: sessionData?.m_totalLaps != null && lapData?.m_currentLapNum != null
+            ? sessionData.m_totalLaps - lapData.m_currentLapNum
+            : null,
+          position: lapData?.m_carPosition,
+        },
       }} />
     </div>
   );
