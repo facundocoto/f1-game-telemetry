@@ -1,7 +1,11 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
+const cors = require('cors');
 const { Server } = require('socket.io');
 const { F1TelemetryClient, constants } = require('@racehub-io/f1-telemetry-client');
+const chatRouter = require('./chat');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +15,10 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
+
+app.use(cors());
+app.use(express.json());
+app.use('/api/chat', chatRouter);
 
 const PORT = process.env.PORT || 3000;
 const F1_UDP_PORT = 20777;
