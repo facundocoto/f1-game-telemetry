@@ -1,0 +1,4 @@
+- En la seccion engineering, las temperaturas parecen estar en otra unidad o mal calculadas. Aparecen datos de 600 grados centigrados
+- En el navbar, agreguemos el circuito y etapa (qualy, race, fp) que se esta corriendo
+- Si hay coche de seguridad el componente que dice safety car deberia ponerse amarillo
+- Que otros datos se puede agregar al analysis vs otro piloto?
