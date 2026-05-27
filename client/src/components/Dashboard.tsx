@@ -581,8 +581,10 @@ const TyreWidget: React.FC<{
       case 16: return { name: 'SOFT', color: '#e10600' };
       case 17: return { name: 'MEDIUM', color: '#fff200' };
       case 18: return { name: 'HARD', color: '#ffffff' };
-      case 19: return { name: 'INTER', color: '#00ff00' };
-      case 20: return { name: 'WET', color: '#0000ff' };
+      case 7:
+      case 19: return { name: 'INTER', color: '#39b54a' };
+      case 8:
+      case 20: return { name: 'WET', color: '#0067ff' };
       default: return { name: 'UNKNOWN', color: '#666' };
     }
   };

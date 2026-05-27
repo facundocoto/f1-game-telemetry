@@ -42,7 +42,9 @@ export const PowerTiresWidget: React.FC<PowerTiresWidgetProps> = ({ carStatus })
         <div className="flex flex-col gap-1">
           <label className="text-[0.75rem] text-f1-gray font-black uppercase tracking-wider">🛞 COMPOUND</label>
           <div className="text-[1.3rem] font-black">
-            {carStatus.m_tyresAgeLaps} LAPS - {['SOFT','MED','HARD','WET'][carStatus.m_visualTyreCompound - 16] || '---'}
+            {carStatus.m_tyresAgeLaps} LAPS - {
+              ({ 16:'SOFT', 17:'MED', 18:'HARD', 19:'INTER', 20:'WET', 7:'INTER', 8:'WET' } as Record<number,string>)[carStatus.m_visualTyreCompound] || '---'
+            }
           </div>
         </div>
       </div>

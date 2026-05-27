@@ -198,7 +198,7 @@ function App() {
           brakesTemperature: telemetry?.m_brakesTemperature,
         },
         tyres: {
-          visualCompound: carStatus?.m_visualTyreCompound, // 16=Soft 17=Medium 18=Hard 19=Inter 20=Wet
+          visualCompound: carStatus?.m_visualTyreCompound, // F1 25: 16=Soft 17=Med 18=Hard 19=C2 20=C1 7=Inter 8=Wet
           actualCompound: carStatus?.m_actualTyreCompound,
           tyreAgeLaps: carStatus?.m_tyresAgeLaps,
           wear_pct: carDamage?.m_tyresWear,               // [RL, RR, FL, FR] %
@@ -264,7 +264,7 @@ function App() {
               position: pos,
               currentLap: (ld as any).m_currentLapNum,
               lastLapTime_ms: (ld as any).m_lastLapTimeInMS,
-              tyreCompound: (st as any)?.m_visualTyreCompound, // 16=S 17=M 18=H 19=I 20=W
+              tyreCompound: (st as any)?.m_visualTyreCompound, // 16=Soft 17=Med 18=Hard 7=Inter 8=Wet
               tyreAgeLaps: (st as any)?.m_tyresAgeLaps,
               gapToPlayerMeters: (() => {
                 const playerLd = allLapData[playerIndex];
