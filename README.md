@@ -8,6 +8,8 @@
 
 This project is a high-performance, real-time telemetry dashboard for Codemasters' Formula 1 games (F1 23, F1 24, F1 25). It captures binary UDP telemetry packets from your PC or Console and broadcasts them via Socket.io to a modern React-based web interface.
 
+It also includes a **Race Engineer AI Chat** powered by OpenRouter (or OpenAI), which reads your live telemetry and answers strategy questions by voice or text — pit timing, tyre selection, performance analysis, and more.
+
 ## 🚀 Features
 
 - **🏆 Live Standings**: Real-time leaderboard with interval tracking and position changes.
@@ -25,6 +27,12 @@ This project is a high-performance, real-time telemetry dashboard for Codemaster
   - Core engine thermal monitoring.
   - G-Force radar and input telemetry (Throttle/Brake).
 - **⚡ Energy Management**: ERS deployment modes and battery status, plus precise fuel remaining calculation.
+- **🤖 Race Engineer AI Chat**:
+  - Ask strategy questions by voice (push-to-talk with `Space`) or text.
+  - The AI receives your full live telemetry: position, tyres, fuel, damage, lap history, all opponents' compounds and gaps, and weather forecast.
+  - Text-to-speech reads responses aloud using Google voices.
+  - Supports English and Spanish (language-aware STT, TTS, and AI responses).
+  - Switch between **OpenRouter** (free models available) and **OpenAI** (GPT-4o mini).
 
 ---
 
@@ -33,6 +41,38 @@ This project is a high-performance, real-time telemetry dashboard for Codemaster
 - **Node.js** (v18 or higher)
 - **F1 23, F1 24, or F1 25** installed on Xbox, PlayStation, or PC.
 - Both devices (PC running the dashboard and the Game Console/PC) must be on the **same local network**.
+- An **OpenRouter** account for the AI Race Engineer feature (free tier available).
+
+---
+
+## 🤖 AI Race Engineer Setup
+
+The AI chat requires an API key from at least one provider.
+
+### OpenRouter (recommended — free models available)
+
+1. Create a free account at [openrouter.ai](https://openrouter.ai).
+2. Go to **Keys** → **Create Key** and copy your key (starts with `sk-or-`).
+3. The default model is `google/gemini-2.0-flash-001`.
+4. Browse all available models at [openrouter.ai/models](https://openrouter.ai/models).
+
+### OpenAI (optional)
+
+1. Create an account at [platform.openai.com](https://platform.openai.com).
+2. Go to **API Keys** and create a new key.
+3. The default model is `gpt-4o-mini`.
+
+### Configure your keys
+
+Create `server/.env` (copy from `server/.env.example`):
+
+```env
+OPENROUTER_API_KEY=sk-or-your-key-here
+OPENAI_API_KEY=sk-your-key-here   # optional
+PORT=3000
+```
+
+> **Note:** The `.env` file is gitignored and will never be committed. Never share your API keys.
 
 ---
 
@@ -64,7 +104,14 @@ cd server && npm install
 cd ../client && npm install
 ```
 
-### 2. Start Everything (Single Command)
+### 2. Configure your API keys
+
+```bash
+cp server/.env.example server/.env
+# Then edit server/.env and paste your OpenRouter key
+```
+
+### 3. Start Everything (Single Command)
 
 Start both the backend and the frontend with one command from the root:
 
@@ -91,6 +138,6 @@ If you don't have the console handy:
 
 ## 🏗️ Architecture
 
-- **Backend (Node.js)**: Uses `@racehub-io/f1-telemetry-client` to parse UDP data.
+- **Backend (Node.js)**: Uses `@racehub-io/f1-telemetry-client` to parse UDP data. Exposes a `/api/chat` endpoint that proxies requests to OpenRouter or OpenAI with full telemetry context.
 - **Frontend (React + Vite + TypeScript)**: Features a high-fidelity F1 TV Broadcast aesthetic with professional telemetry visuals.
 - **Communication**: Real-time bi-directional communication via **Socket.io**.
