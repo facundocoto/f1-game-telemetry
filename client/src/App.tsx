@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
 import Dashboard from './components/Dashboard';
+import AIChatWidget from './components/widgets/AIChatWidget';
 import type { TelemetryData, LapData, CarStatus, CarDamage, Participant, SessionHistory, MotionData } from './components/Dashboard';
 
 const SOCKET_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : `http://${window.location.hostname}:3000`;
@@ -150,6 +151,67 @@ function App() {
           isConnected={isConnected}
         />
       </main>
+      <AIChatWidget telemetryContext={{
+        session: {
+          track: sessionData?.m_trackId,
+          sessionType: sessionData?.m_sessionType,
+          weather: sessionData?.m_weather,
+          trackTemperature: sessionData?.m_trackTemperature,
+          airTemperature: sessionData?.m_airTemperature,
+          totalLaps: sessionData?.m_totalLaps,
+          trackLength: sessionData?.m_trackLength,
+          safetyCarStatus: sessionData?.m_safetyCarStatus,
+        },
+        driver: {
+          name: participant?.m_name,
+          position: lapData?.m_carPosition,
+          currentLap: lapData?.m_currentLapNum,
+          lastLapTimeMs: lapData?.m_lastLapTimeInMS,
+          currentLapTimeMs: lapData?.m_currentLapTimeInMS,
+          sector1Ms: lapData?.m_sector1TimeInMS,
+          sector2Ms: lapData?.m_sector2TimeInMS,
+          lapDistance: lapData?.m_lapDistance,
+        },
+        car: {
+          speedKmh: telemetry?.m_speed,
+          throttle: telemetry?.m_throttle,
+          brake: telemetry?.m_brake,
+          gear: telemetry?.m_gear,
+          engineRPM: telemetry?.m_engineRPM,
+          engineTemperature: telemetry?.m_engineTemperature,
+          tyresSurfaceTemp: telemetry?.m_tyresSurfaceTemperature,
+          tyresInnerTemp: telemetry?.m_tyresInnerTemperature,
+          tyresPressure: telemetry?.m_tyresPressure,
+          brakesTemperature: telemetry?.m_brakesTemperature,
+        },
+        tyres: {
+          visualCompound: carStatus?.m_visualTyreCompound,  // 16=Soft 17=Medium 18=Hard 19=Inter 20=Wet
+          actualCompound: carStatus?.m_actualTyreCompound,
+          tyreAgeLaps: carStatus?.m_tyresAgeLaps,
+          wear: carDamage?.m_tyresWear,  // [RL, RR, FL, FR] %
+          fuelRemainingLaps: carStatus?.m_fuelRemainingLaps,
+          fuelInTank: carStatus?.m_fuelInTank,
+          ersStoreEnergy: carStatus?.m_ersStoreEnergy,
+          ersDeployMode: carStatus?.m_ersDeployMode,
+        },
+        damage: {
+          frontLeftWing: carDamage?.m_frontLeftWingDamage,
+          frontRightWing: carDamage?.m_frontRightWingDamage,
+          rearWing: carDamage?.m_rearWingDamage,
+          gearbox: carDamage?.m_gearBoxDamage,
+          engine: carDamage?.m_engineDamage,
+          engineICE: carDamage?.m_engineICEWear,
+          engineMGUK: carDamage?.m_engineMGUKWear,
+          engineMGUH: carDamage?.m_engineMGUHWear,
+          engineES: carDamage?.m_engineESWear,
+          engineCE: carDamage?.m_engineCEWear,
+          engineTC: carDamage?.m_engineTCWear,
+        },
+        gForces: {
+          lateral: motionData?.m_carMotionData[playerIndex]?.m_gForceLateral,
+          longitudinal: motionData?.m_carMotionData[playerIndex]?.m_gForceLongitudinal,
+        }
+      }} />
     </div>
   );
 }
