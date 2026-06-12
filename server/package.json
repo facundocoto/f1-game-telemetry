@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:record": "node index.js --record",
     "mock": "node mock_telemetry.js",
+    "playback": "node playback_telemetry.js",
     "log": "node logger.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

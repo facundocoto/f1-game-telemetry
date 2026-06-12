@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\"",
+    "dev:record": "concurrently \"npm run start:record --prefix server\" \"npm run dev --prefix client\"",
     "dev:mock": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\" \"npm run mock --prefix server\"",
+    "dev:playback": "concurrently \"npm start --prefix server\" \"npm run dev --prefix client\" \"npm run playback --prefix server\"",
+    "playback": "npm run playback --prefix server",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

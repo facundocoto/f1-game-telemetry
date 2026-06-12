@@ -757,9 +757,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     .filter(item => item.ld !== null && (item.ld as any).m_carPosition > 0 && (item.ld as any).m_carPosition <= 22)
     .sort((a, b) => ((a.ld as any).m_carPosition ?? 99) - ((b.ld as any).m_carPosition ?? 99))
     .map((item, i, arr) => {
-      const leaderTime = (arr[0].ld as any).m_currentLapTimeInMS;
-      const myTime = (item.ld as any).m_currentLapTimeInMS;
-      const delta = i === 0 ? 0 : myTime - leaderTime;
+      const ld = item.ld as any;
+      let delta = 0;
+      if (i > 0 && arr[0]) {
+        const nativeDelta = ld.m_deltaToCarInFrontInMS || ld.m_deltaToRaceLeaderInMS || 0;
+        // Check if the delta is valid (under 10 minutes)
+        if (nativeDelta > 0 && nativeDelta < 600000) {
+          delta = nativeDelta;
+        } else {
+          // Fallback to current lap time delta if native is not populated
+          const leaderTime = (arr[0].ld as any).m_currentLapTimeInMS;
+          const myTime = ld.m_currentLapTimeInMS;
+          delta = (myTime > leaderTime) ? myTime - leaderTime : 0;
+        }
+      }
       return { ...item, delta };
     });
 
@@ -1001,8 +1012,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                     {primaryDataSource === 'live' && <option value="">YOUR BEST LAP</option>}
                     {allParticipants.map((p, i) => {
                       if (!p || (i === playerIndex && primaryDataSource === 'live')) return null;
-                      const hasData = bestLapsTelemetry[i]?.length > 0;
-                      return <option key={i} value={i}>{p.m_name} {hasData ? "✓" : "(No Data)"}</option>;
+                      const hasBestData = bestLapsTelemetry[i]?.length > 0;
+                      const hasLiveData = currentLapsTelemetry[i]?.length > 0;
+                      const statusLabel = hasBestData ? "✓" : (hasLiveData ? "(Live Data)" : "(No Data)");
+                      return <option key={i} value={i}>{(p as any).m_name} {statusLabel}</option>;
                     })}
                   </select>
                 </div>
@@ -1011,20 +1024,20 @@ const Dashboard: React.FC<DashboardProps> = ({
 
             <TelemetryChart 
               primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
-              secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+              secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || currentLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
               trackLength={sessionData?.m_trackLength || 5000} 
               primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
-              secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
+              secondaryLabel={comparisonCarIndex !== null ? `${(allParticipants[comparisonCarIndex] as any)?.m_name || 'DRIVER'}'S ${bestLapsTelemetry[comparisonCarIndex]?.length > 0 ? 'BEST' : 'LIVE'}` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
               onExpand={() => setActiveModalChart("TELEMETRY COMPARISON")}
             />
 
             <ChartModal isOpen={!!activeModalChart} onClose={() => setActiveModalChart(null)} title={activeModalChart || ""}>
               <TelemetryChart 
                 primaryPoints={primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
-                secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
+                secondaryPoints={comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || currentLapsTelemetry[comparisonCarIndex] || []) : (bestLapsTelemetry[playerIndex] || [])} 
                 trackLength={sessionData?.m_trackLength || 5000} 
                 primaryLabel={primaryDataSource === 'live' ? "LIVE TELEMETRY" : "YOUR BEST LAP"}
-                secondaryLabel={comparisonCarIndex !== null ? `${allParticipants[comparisonCarIndex]?.m_name}'S BEST` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
+                secondaryLabel={comparisonCarIndex !== null ? `${(allParticipants[comparisonCarIndex] as any)?.m_name || 'DRIVER'}'S ${bestLapsTelemetry[comparisonCarIndex]?.length > 0 ? 'BEST' : 'LIVE'}` : (primaryDataSource === 'live' ? "YOUR BEST LAP" : "SELECT DRIVER")}
                 isExpanded={true}
               />
             </ChartModal>
@@ -1032,7 +1045,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-4">
               {(() => {
                 const primaryData = primaryDataSource === 'live' ? (currentLapsTelemetry[playerIndex] || []) : (bestLapsTelemetry[playerIndex] || []);
-                const secondaryData = comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || []) : null;
+                const secondaryData = comparisonCarIndex !== null ? (bestLapsTelemetry[comparisonCarIndex] || currentLapsTelemetry[comparisonCarIndex] || []) : null;
 
                 const secondaryHistory = comparisonCarIndex !== null ? sessionHistory[comparisonCarIndex] : null;
                 const validSecondaryLaps = secondaryHistory 

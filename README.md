@@ -136,6 +136,57 @@ If you don't have the console handy:
 
 ---
 
+## 🎥 Telemetry Recording & Playback
+
+The dashboard supports recording real sessions from your game and playing them back later. This is extremely useful for developing features or analyzing your driving without needing the game running.
+
+### 🔴 Recording Telemetry
+By default, recording is disabled to save CPU and disk space. To start the system with telemetry recording enabled, use:
+```bash
+npm run dev:record
+```
+This will automatically record all incoming live UDP packets continuously into `server/telemetry_recording.jsonl` (cleared/re-created each time the recording starts).
+
+*Note: You can also enable recording by starting the backend with the `--record` flag or by setting the environment variable `RECORD_TELEMETRY=true`.*
+
+### 🟢 Playback Recorded Telemetry
+To play back your recorded session and stream it live to the React dashboard:
+1. Ensure the main system is running (without or with recording):
+   ```bash
+   npm run dev
+   ```
+2. Start the playback:
+   ```bash
+   # From the root directory:
+   npm run playback
+
+   # Or from the server directory:
+   cd server && npm run playback
+   ```
+This will loop your last recorded session indefinitely in real-time.
+
+#### Playback Options
+You can configure the playback speed or play a specific file using arguments (only available when running from the `server` directory):
+- `--no-loop`: Stop playback after the session ends instead of looping.
+- `--speed=X`: Change playback speed (e.g., `--speed=2.0` for 2x speed, `--speed=0.5` for half speed).
+- `--file=path/to/file.jsonl`: Play back a custom recording file.
+
+Example:
+```bash
+cd server && npm run playback -- --speed=2.0 --no-loop
+```
+
+### 🔄 Re-recording / Resetting a Session
+If your previous recording was captured with an older or incorrect UDP packet format (e.g., prior to F1 24 custom parser patches), or you simply want to start over:
+1. Delete the existing recording file (e.g., `server/telemetry_recording.jsonl`).
+2. Start the main dashboard server with recording enabled:
+   ```bash
+   npm run dev:record
+   ```
+3. Enter the track on your game. A fresh, properly formatted F1 24 recording will be generated automatically.
+
+---
+
 ## 🏗️ Architecture
 
 - **Backend (Node.js)**: Uses `@racehub-io/f1-telemetry-client` to parse UDP data. Exposes a `/api/chat` endpoint that proxies requests to OpenRouter or OpenAI with full telemetry context.
